@@ -1,3 +1,5 @@
+import pytest
+
 from magicscanner.recognition.ocr import CollectorInfo, OcrLine, collector_info, detect_language, title_candidates
 
 
@@ -29,3 +31,13 @@ def test_language_detection():
     assert detect_language(fr) == "fr"
     assert detect_language(en) == "en"
     assert detect_language([line("4/4", 0.9)]) is None
+
+
+@pytest.mark.parametrize("text, number", [("0087 U", "87"), ("C 0126", "126"), ("R 0096", "96"), ("U0247", "247"), ("0004", "4")])
+def test_recent_frame_numbers_with_the_rarity_before_or_after(text, number):
+    assert collector_info([line(text, 0.94)]).number == number
+
+
+@pytest.mark.parametrize("text", ["4/4", "2/2", "Illus. Dave Dorman", "MSH • EN"])
+def test_other_bottom_lines_are_not_taken_for_a_number(text):
+    assert collector_info([line(text, 0.95)]).number is None

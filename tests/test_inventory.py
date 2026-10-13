@@ -97,3 +97,23 @@ def test_backfill_catches_up_publications_made_before_the_journal(con):
     db.backfill_listings(con)   # idempotent
     (entry,) = inventory.listings(con)
     assert (entry["price"], entry["amount"]) == (0.20, 1)
+
+
+def test_withdrawing_a_listing_keeps_the_history_and_frees_the_copy(con):
+    scan_id = inventory.add_scan(con, "grave-dka", "fr", 0.9, "")
+    inventory.mark_listed(con, _line(con), 1, "https://example/wrong-page")
+    inventory.withdraw_listing(con, _line(con), 1)          # annonce retirée à la main sur Cardmarket
+
+    assert inventory.quantity(con, "grave-dka", "fr") == (1, 0)
+    assert [e["amount"] for e in reversed(inventory.listings(con))] == [1, -1]   # publication puis retrait
+    assert inventory.listings(con)[0]["url"] == "https://example/wrong-page"
+    assert inventory.stats(con)["to_list"] == 1               # à republier
+    assert inventory.reassign_scan(con, scan_id, "plains-1", "en")   # le scan peut maintenant être corrigé
+    db.backfill_listings(con)                                  # le rattrapage ne recrée pas la publication retirée
+    assert sum(e["amount"] for e in inventory.listings(con)) == 0
+
+
+def test_cannot_withdraw_more_than_was_published(con):
+    inventory.add_scan(con, "grave-dka", "fr", 0.9, "")
+    with pytest.raises(ValueError):
+        inventory.withdraw_listing(con, _line(con), 1)

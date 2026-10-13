@@ -46,11 +46,17 @@ def cmd_status(con, args) -> None:
         print(f"  erreur de listing : {r['list_error']} ({r['n']})")
 
 
+def cmd_unlist(con, args) -> None:
+    inventory.withdraw_listing(con, args.line_id, args.amount)
+    print(f"Retrait enregistré : {args.amount} exemplaire(s) de la ligne {args.line_id} ne sont plus comptés comme publiés.")
+
+
 def cmd_history(con, args) -> None:
     rows = inventory.listings(con, args.limit)
     for r in reversed(rows):
+        what = f"x{r['amount']} à {r['price']:.2f} €" if r["amount"] > 0 else f"RETRAIT de {-r['amount']}"
         print(f"{r['listed_local']}  {r['name']} [{r['set_code'].upper()} #{r['collector_number']}] "
-              f"{r['lang'].upper()} {r['condition']}  x{r['amount']} à {r['price']:.2f} €")
+              f"{r['lang'].upper()} {r['condition']}  {what}")
     print(f"{len(rows)} mises en vente affichées")
 
 
@@ -91,6 +97,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_list)
 
     sub.add_parser("status", help="résumé de l'inventaire").set_defaults(func=cmd_status)
+
+    p = sub.add_parser("unlist", help="enregistre qu'une annonce a été retirée à la main sur Cardmarket")
+    p.add_argument("line_id", type=int, help="numéro de la ligne d'inventaire (colonne id)")
+    p.add_argument("--amount", type=int, default=1)
+    p.set_defaults(func=cmd_unlist)
 
     p = sub.add_parser("history", help="journal des mises en vente (carte, prix, quantité, date)")
     p.add_argument("--limit", type=int, default=50)

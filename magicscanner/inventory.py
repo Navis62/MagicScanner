@@ -103,6 +103,26 @@ def mark_listed(con: sqlite3.Connection, line_id: int, amount: int, url: str | N
     con.commit()
 
 
+def withdraw_listing(con: sqlite3.Connection, line_id: int, amount: int = 1) -> None:
+    """À appeler après avoir retiré à la main une annonce sur Cardmarket : le compteur « publiées » baisse et le
+    journal garde la trace du retrait (ligne de quantité négative, la publication d'origine reste visible)."""
+    line = con.execute("SELECT listed_quantity FROM inventory WHERE id=?", (line_id,)).fetchone()
+    if line is None:
+        raise ValueError(f"ligne d'inventaire {line_id} introuvable")
+    if not 0 < amount <= line["listed_quantity"]:
+        raise ValueError(f"la ligne {line_id} n'a que {line['listed_quantity']} exemplaire(s) publié(s)")
+    con.execute("UPDATE inventory SET listed_quantity = listed_quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE id=?",
+                (amount, line_id))
+    con.execute(
+        """INSERT INTO listings (inventory_id, card_id, lang, condition, price, amount, url)
+           SELECT id, card_id, lang, condition, price, ?,
+                  (SELECT url FROM listings WHERE inventory_id = inventory.id AND amount > 0 ORDER BY id DESC LIMIT 1)
+           FROM inventory WHERE id=?""",
+        (-amount, line_id),
+    )
+    con.commit()
+
+
 def listings(con: sqlite3.Connection, limit: int = 50) -> list[sqlite3.Row]:
     """Dernières mises en vente (carte, langue, état, prix auquel elle a été faite, quantité, date)."""
     return con.execute(

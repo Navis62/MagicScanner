@@ -52,6 +52,10 @@ def _strip_zeros(n: str) -> str:
     return n.lstrip("0") or "0"
 
 
+# Numéro sans total, rareté avant ou après : « 0087 U » (Commander 2013…) ou « C 0126 » (Marvel Super Heroes…).
+RECENT_NUMBER = re.compile(r"^\s*(?:(\d{3,4})\s*[CURMLST]?|[CURMLST]\s*(\d{3,4}))\s*$")
+
+
 def collector_info(lines: list[OcrLine]) -> CollectorInfo:
     number = total = set_code = None
     for text in (l.text for l in lines if l.y > 0.88):
@@ -59,8 +63,8 @@ def collector_info(lines: list[OcrLine]) -> CollectorInfo:
             number, total = _strip_zeros(m.group(1)), _strip_zeros(m.group(2))
         if set_code is None and (m := re.search(r"\b([A-Z0-9]{3,5})\s*[•·.*\-]\s*(EN|FR)\b", text.upper())):
             set_code = m.group(1).lower()
-        if number is None and (m := re.match(r"^\s*(\d{3,4})\s*[CURMLST]?\s*$", text)):
-            number = _strip_zeros(m.group(1))  # cadre récent : « 0087 U »
+        if number is None and (m := RECENT_NUMBER.match(text)):
+            number = _strip_zeros(m.group(1) or m.group(2))  # cadre récent : « 0087 U » ou, selon l'édition, « C 0126 »
     return CollectorInfo(number, total, set_code)
 
 
