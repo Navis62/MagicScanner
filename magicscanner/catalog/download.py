@@ -16,7 +16,6 @@ def download(url: str, dest: Path) -> Path:
     with httpx.stream("GET", url, headers=SCRYFALL_HEADERS, follow_redirects=True, timeout=None) as r:
         r.raise_for_status()
         with open(tmp, "wb") as f:
-            for chunk in r.iter_bytes(1 << 20):
-                f.write(chunk)
+            f.writelines(r.iter_bytes(1 << 20))
     tmp.replace(dest)
     return dest

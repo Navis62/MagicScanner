@@ -1,6 +1,12 @@
 import pytest
 
-from magicscanner.recognition.ocr import CollectorInfo, OcrLine, collector_info, detect_language, title_candidates
+from magicscanner.recognition.ocr import (
+    CollectorInfo,
+    OcrLine,
+    collector_info,
+    detect_language,
+    title_candidates,
+)
 
 
 def line(text, y, x=0.08):

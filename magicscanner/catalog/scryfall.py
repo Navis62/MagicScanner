@@ -11,7 +11,13 @@ from pathlib import Path
 
 import httpx
 
-from ..config import LANGS, SCRYFALL_BULK_URL, SCRYFALL_DIR, SCRYFALL_HEADERS, SCRYFALL_SETS_URL
+from ..config import (
+    LANGS,
+    SCRYFALL_BULK_URL,
+    SCRYFALL_DIR,
+    SCRYFALL_HEADERS,
+    SCRYFALL_SETS_URL,
+)
 from .download import download
 
 log = logging.getLogger(__name__)
