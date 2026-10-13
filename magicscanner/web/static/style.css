@@ -133,7 +133,7 @@ select#camera { max-width: 220px; text-overflow: ellipsis; }
 /* ───────── Mise en page ───────── */
 main {
   display: grid;
-  grid-template-columns: minmax(380px, 5fr) minmax(520px, 7fr);
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);   /* caméra étroite, le résultat prend le reste */
   gap: 18px;
   padding: 18px 24px 8px;
   max-width: 1700px; margin: 0 auto;
@@ -158,11 +158,12 @@ main {
 .cam { display: flex; flex-direction: column; }
 .video-wrap {
   position: relative; overflow: hidden;
-  aspect-ratio: 16 / 9; cursor: crosshair;
+  aspect-ratio: 3 / 4; cursor: crosshair;   /* format portrait, comme la carte */
   background: #000; border-radius: 12px;
   box-shadow: 0 0 0 1px var(--line), 0 18px 36px -20px rgba(0, 0, 0, .9);
 }
-video { display: block; width: 100%; height: 100%; transform-origin: 0 0; }
+/* Taille et position calculées par preview.js (l'image est plus large que la fenêtre : on en voit le centre). */
+video { position: absolute; top: 0; left: 0; max-width: none; transform-origin: 0 0; }
 
 .corner { position: absolute; width: 26px; height: 26px; pointer-events: none; border: 0 solid var(--gold); opacity: .85; }
 .corner.tl { top: 12px; left: 12px; border-top-width: 3px; border-left-width: 3px; border-top-left-radius: 8px; }
@@ -193,12 +194,12 @@ video { display: block; width: 100%; height: 100%; transform-origin: 0 0; }
 .status.err::before { background: var(--bad); box-shadow: 0 0 8px var(--bad); }
 @keyframes pulse { 50% { opacity: .35; } }
 
-.zoom { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 12px; color: var(--muted); font-size: 13px; }
-.zoom button { white-space: nowrap; }
+.zoom { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px 12px; margin-top: 12px; color: var(--muted); font-size: 13px; }
 .zoom-slider { display: flex; align-items: center; gap: 10px; }
-.zoom input[type=range] { width: 110px; padding: 0; accent-color: var(--gold); background: none; border: none; }
+.zoom input[type=range] { flex: 1; min-width: 0; padding: 0; accent-color: var(--gold); background: none; border: none; }
+.zoom-actions { grid-column: 1 / -1; display: flex; gap: 8px; }
+.zoom-actions button { flex: 1; white-space: nowrap; padding: 6px 8px; }
 #zoom-val { min-width: 34px; font-variant-numeric: tabular-nums; color: var(--text); }
-.spacer { flex: 1; }
 
 .analysis { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
 .analysis h3 { margin-bottom: 10px; font: 600 11px var(--font); letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
@@ -207,7 +208,7 @@ video { display: block; width: 100%; height: 100%; transform-origin: 0 0; }
   flex: none; width: 118px; aspect-ratio: 63 / 88; object-fit: cover;
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
 }
-.warped-wrap img:not([src]), .warped-wrap img[src=""] { visibility: hidden; }
+.warped-wrap img:not([src]), .warped-wrap img[src=""] { display: none; }
 .ocr { flex: 1; max-height: 164px; overflow: auto; font: 12px/1.6 var(--mono); color: var(--muted); white-space: pre-wrap; }
 
 /* ───────── Résultat ───────── */
@@ -315,6 +316,7 @@ dd { margin: 0; font-size: 15px; min-width: 0; font-variant-numeric: tabular-num
 /* ───────── Écrans étroits ───────── */
 @media (max-width: 1180px) {
   main { grid-template-columns: 1fr; }
+  .cam { width: 100%; max-width: 420px; justify-self: center; }
   .topbar { flex-wrap: wrap; gap: 14px; }
   .stats { order: 3; flex-basis: 100%; }
 }

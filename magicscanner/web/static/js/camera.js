@@ -26,7 +26,7 @@ async function start(deviceId) {
     video.srcObject = stream;
     await video.play().catch(() => {});
     store.set("ms-camera", deviceId);
-    setStatus("Caméra prête — pose une carte et appuie sur Espace");
+    setStatus("Prêt — Espace pour scanner");
   } catch (e) {
     const busy = e.name === "NotReadableError" || e.name === "AbortError";
     setStatus(busy

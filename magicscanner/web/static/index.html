@@ -50,15 +50,16 @@
       <video id="video" autoplay playsinline muted></video>
       <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
       <div class="sweep"></div>
-      <div id="status" class="status">Prêt — pose une carte et appuie sur <kbd>Espace</kbd></div>
+      <div id="status" class="status">Prêt — <kbd>Espace</kbd> pour scanner</div>
     </div>
     <div class="zoom">
       <label class="zoom-slider">Zoom <input type="range" id="zoom" min="1" max="5" step="0.1" value="1"></label>
       <span id="zoom-val">1.0×</span>
-      <span class="spacer"></span>
-      <button id="zoom-card" class="ghost" title="Centrer et zoomer sur la dernière carte détectée">Cadrer</button>
-      <button id="zoom-reset" class="ghost">Vue entière</button>
-      <button id="cam-restart" class="ghost" title="Relancer le flux de la webcam">Relancer</button>
+      <div class="zoom-actions">
+        <button id="zoom-card" class="ghost" title="Centrer et zoomer sur la dernière carte détectée">Cadrer</button>
+        <button id="zoom-reset" class="ghost">Vue entière</button>
+        <button id="cam-restart" class="ghost" title="Relancer le flux de la webcam">Relancer</button>
+      </div>
     </div>
     <div class="analysis">
       <h3>Dernière analyse <span id="list-chip" class="chip list" hidden></span></h3>
