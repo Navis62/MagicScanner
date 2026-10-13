@@ -118,7 +118,7 @@ pytest -m "not integration"   # sans la base importée
 
 ## Configuration (variables d'environnement)
 
-`MS_PRICE` (0.20), `MS_PRICE_ALERT` (1.00), `MS_CHROME` (chemin chrome.exe), `MS_CDP_PORT` (9222),
+`MS_PRICE` (0.20), `MS_PRICE_ALERT` (1.00), `MS_KEEP_SCANS` (`low` : photos gardées seulement pour les scans à vérifier ; `none` ou `all`), `MS_CHROME` (chemin chrome.exe), `MS_CDP_PORT` (9222),
 `MS_WINDOW` (`left,top,width,height` de la fenêtre Chrome, `40,40,1500,1000`), `MS_DATA` (dossier `data/`).
 
 ## Limites connues (POC)

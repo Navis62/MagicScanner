@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from .. import db, inventory
 from ..catalog import Catalog
-from ..config import SCANS_DIR, ensure_dirs
+from ..config import KEEP_SCANS, LOW_CONFIDENCE, SCANS_DIR, ensure_dirs
 from ..recognition import Candidate, Recognizer, detect
 from .publisher import PublishJob
 
@@ -106,11 +106,13 @@ async def scan(image: UploadFile = File(...)):
             return out
         best = rec.best
         scan_id = inventory.add_scan(svc.con, best.card_id, rec.lang, rec.confidence, " | ".join(rec.lines))
-        cv2.imwrite(str(SCANS_DIR / f"{scan_id}.jpg"), rec.warped)
+        if KEEP_SCANS == "all" or (KEEP_SCANS == "low" and rec.confidence < LOW_CONFIDENCE):
+            cv2.imwrite(str(SCANS_DIR / f"{scan_id}.jpg"), rec.warped, [cv2.IMWRITE_JPEG_QUALITY, 70])
         card = _card(best.card_id, rec.lang, best)
         svc.previous_set = card["set_code"]
         return out | {
             "scan_id": scan_id,
+            "needs_review": rec.confidence < LOW_CONFIDENCE,
             "card": card,
             "alternatives": [_card(c.card_id, candidate=c) for c in rec.candidates[1:1 + MAX_ALTERNATIVES]],
             "stats": inventory.stats(svc.con),

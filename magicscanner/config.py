@@ -11,6 +11,9 @@ SCRYFALL_DIR = DATA / "scryfall"
 CARDMARKET_DIR = DATA / "cardmarket"
 IMAGE_CACHE = DATA / "images"
 SCANS_DIR = DATA / "scans"
+# Photos des scans conservées pour contrôle : "none", "low" (confiance faible seulement) ou "all" (~80 Ko chacune).
+KEEP_SCANS = os.environ.get("MS_KEEP_SCANS", "low")
+LOW_CONFIDENCE = 0.5   # en dessous, l'interface demande de vérifier la carte
 CHROME_PROFILE = DATA / "chrome-profile"
 
 # --- Vente (POC : tout est NM, prix fixe) ---------------------------------------------------------------------

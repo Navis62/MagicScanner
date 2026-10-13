@@ -7,8 +7,6 @@ import { initPublish, updateToList } from "./publish.js";
 import { sound } from "./sound.js";
 import * as view from "./view.js";
 
-const LOW_CONFIDENCE = 0.5;
-
 // Carte affichée. mode : "scan" (un clic sur une alternative corrige ce scan) ou "add" (un clic ajoute la carte).
 let current = null;   // { mode, scanId, card, lang, alternatives, undone }
 let busy = false;
@@ -50,7 +48,7 @@ const scan = safe(async () => {
     current = { mode: "scan", scanId: r.scan_id, card: r.card, lang: r.lang, alternatives: r.alternatives };
     view.showCard(r.card, r.lang, r.confidence);
     showAlternatives();
-    const low = r.confidence < LOW_CONFIDENCE;
+    const low = r.needs_review;
     view.setResultState(low ? "warn" : "ok");
     view.setStatus(low ? "Ajoutée — à vérifier (confiance faible)" : "Ajoutée ✔ — Espace pour la suivante", low ? "busy" : "ok");
     low ? sound.check() : sound.ok();
