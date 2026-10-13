@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MagicScanner</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>MagicScanner</h1>
+  <div class="stats">
+    <span>Aujourd'hui <b id="st-today">0</b></span>
+    <span>En stock <b id="st-cards">0</b></span>
+    <span>À lister <b id="st-tolist">0</b></span>
+    <span>Valeur <b id="st-value">0 €</b></span>
+  </div>
+  <select id="camera" title="Caméra"></select>
+</header>
+
+<main>
+  <section class="cam">
+    <div class="video-wrap">
+      <video id="video" autoplay playsinline muted></video>
+      <div id="status" class="status">Prêt — pose une carte et appuie sur <kbd>Espace</kbd></div>
+    </div>
+    <div class="warped-wrap">
+      <img id="warped" alt="">
+      <div class="ocr" id="ocr"></div>
+    </div>
+  </section>
+
+  <section class="result" id="result">
+    <div class="card-img"><img id="card-img" alt=""></div>
+    <div class="info">
+      <div class="names">
+        <div class="name-vo" id="name-vo">—</div>
+        <div class="name-vf" id="name-vf"></div>
+      </div>
+      <div class="badges">
+        <button id="lang" class="badge lang" title="Basculer VO/VF (L)">—</button>
+        <span id="rarity" class="badge"></span>
+        <span id="conf" class="badge"></span>
+      </div>
+      <dl>
+        <dt>Édition</dt><dd><img id="set-icon" class="set-icon" alt=""> <span id="set-name">—</span></dd>
+        <dt>Numéro</dt><dd id="number">—</dd>
+        <dt>Prix tendance</dt><dd id="trend">—</dd>
+        <dt>En stock</dt><dd id="qty">—</dd>
+        <dt>Cardmarket</dt><dd><a id="cm-url" target="_blank" rel="noopener"></a></dd>
+      </dl>
+      <div class="actions">
+        <button id="btn-next" class="primary"><kbd>Espace</kbd> Suivante</button>
+        <button id="btn-undo" class="danger"><kbd>Échap</kbd> Annuler</button>
+      </div>
+      <div class="search">
+        <input id="search" placeholder="Recherche manuelle (nom VO ou VF)…  [/]" autocomplete="off">
+      </div>
+    </div>
+  </section>
+
+  <section class="alts">
+    <h2 id="alts-title">Autres impressions <small>(clic ou touches 1–9 pour corriger)</small></h2>
+    <div id="alts" class="alts-grid"></div>
+  </section>
+
+  <section class="recent">
+    <h2>Derniers scans</h2>
+    <ol id="recent"></ol>
+  </section>
+</main>
+<canvas id="canvas" hidden></canvas>
+<script src="/static/app.js"></script>
+</body>
+</html>
