@@ -31,6 +31,7 @@ include = ["magicscanner*"]
 
 [tool.setuptools.package-data]
 "magicscanner.web" = ["static/*", "static/js/*"]
+"magicscanner.recognition" = ["assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

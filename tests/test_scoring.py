@@ -42,7 +42,7 @@ def test_the_printed_number_cannot_override_the_foil_penalty_alone(same_frame_pr
 
 
 def candidate(score, product):
-    return Candidate("x", score, 0, 0, [], product)
+    return Candidate("x", score, 0, [], product)
 
 
 def test_close_candidates_in_different_products_are_ambiguous():

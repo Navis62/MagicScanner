@@ -163,7 +163,7 @@ def undo(scan_id: int):
         try:
             undone = inventory.undo_scan(svc.con, scan_id)
         except inventory.AlreadyListed as e:
-            raise HTTPException(409, str(e))
+            raise HTTPException(409, str(e)) from None
         if not undone:
             raise HTTPException(404, "scan introuvable ou déjà annulé")
         return {"ok": True, "stats": inventory.stats(svc.con)}
@@ -175,7 +175,7 @@ def reassign(scan_id: int, body: CardChoice):
         try:
             moved = inventory.reassign_scan(svc.con, scan_id, body.card_id, body.lang)
         except inventory.AlreadyListed as e:
-            raise HTTPException(409, str(e))
+            raise HTTPException(409, str(e)) from None
         if not moved:
             raise HTTPException(404, "scan introuvable ou annulé")
         card = _card(body.card_id, body.lang)

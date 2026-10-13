@@ -48,7 +48,6 @@ class Candidate:
     card_id: str
     score: float
     visual: float
-    symbol: float
     reasons: list[str] = field(default_factory=list)
     cardmarket_id: int | None = None   # produit Cardmarket de l'impression (deux produits différents = annonces différentes)
 
@@ -108,4 +107,4 @@ def score_printing(scan: np.ndarray, p: sqlite3.Row, ev: Evidence) -> Candidate:
         score += SAME_SET_AS_PREVIOUS
     score += NAME_WEIGHT * (ev.name_scores.get(p["oracle_id"], 0) / 100 - 1)
 
-    return Candidate(p["id"], round(score, 4), round(vis["score"], 3), round(vis["symbol"], 3), reasons, p["cardmarket_id"])
+    return Candidate(p["id"], round(score, 4), round(vis["score"], 3), reasons, p["cardmarket_id"])

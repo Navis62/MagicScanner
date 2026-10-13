@@ -46,14 +46,15 @@ Ouvre http://127.0.0.1:8765. Choisir la webcam (la caméra virtuelle Elgato est 
 | `L` | bascule VO / VF |
 | `/` | recherche manuelle par nom (VO ou VF) si la reconnaissance échoue |
 
-Un cadre orange = confiance faible, à vérifier. Le prix tendance Cardmarket est affiché, avec une alerte
+Un cadre orange = confiance faible ou choix ambigu entre deux impressions (autre produit Cardmarket) : à vérifier.
+Les impressions foil-only ne sont jamais choisies pour une carte non-foil. Le prix tendance Cardmarket est affiché, avec une alerte
 si la carte vaut plus de 1 € (`MS_PRICE_ALERT`).
 
 ## Mettre en vente
 
 **Depuis l'interface** : le bouton « Publier N cartes sur Cardmarket » (en haut) met en vente tout ce qui ne l'est
-pas encore, après confirmation. Un rapport s'affiche
-à la fin (cartes publiées, erreurs) et « Arrêter » interrompt proprement après la carte en cours. Tu peux continuer
+pas encore, après confirmation. Une barre de progression indique les exemplaires publiés et la carte en cours ;
+un rapport s'affiche à la fin (cartes publiées, erreurs) et « Arrêter » interrompt proprement après la carte en cours. Tu peux continuer
 à scanner pendant la publication : les nouvelles cartes seront publiées au clic suivant.
 
 **Exemplaires déjà publiés** : le stock distingue « en stock » et « déjà en vente ». Scanner un 2e exemplaire d'une
@@ -77,13 +78,15 @@ magicscanner list --submit --confirm --limit 5   # premiers essais : confirmatio
 magicscanner list --submit               # tout le reste
 magicscanner status
 magicscanner history                          # journal des mises en vente, avec le prix de chacune
+magicscanner unlist 49                        # note qu'une annonce (ligne 49) a été retirée à la main sur Cardmarket
 magicscanner export inventaire.csv
 ```
 
 L'URL est reconstruite (`/en/Magic/Products/Singles/<Extension>/<Carte>`) puis **vérifiée** : le formulaire de
 vente contient l'idProduct, qui doit être égal au `cardmarket_id` Scryfall. Les slugs Cardmarket n'étant pas
 réguliers (`Akroma-s-Memorial`, `LimDuls-Cohort`, `Plains-V-1`), plusieurs variantes sont essayées, puis une
-recherche dans l'extension ; l'URL validée est mémorisée (table `cm_urls`). Seule la quantité pas encore
+recherche dans l'extension ; l'URL validée est mémorisée (table `cm_urls`). Un essai raté fait afficher à Cardmarket
+un bandeau rouge « invalid product » : c'est normal, la variante suivante est essayée. Seule la quantité pas encore
 listée est publiée (`listed_quantity`), on peut donc relancer sans doublon.
 
 ## Cartes « The List » et « Mystery Booster »
@@ -102,14 +105,14 @@ et ce que la caméra a vu (« étincelle vue / douteuse / pas d'étincelle »). 
 99 % des cartes à étincelle sont détectées pour 0 % de fausses alertes. Si une carte est mal classée, `1`–`9` permet
 de choisir l'autre impression.
 
-Limite : environ 1 carte `plst` sur 5 n'a pas d'identifiant Cardmarket dans Scryfall ; elle est reconnue mais
+Limite : l'étincelle n'a été validée que sur des images simulées, pas encore sur une vraie carte. Environ 1 carte `plst` sur 5 n'a pas d'identifiant Cardmarket dans Scryfall ; elle est reconnue mais
 ne peut pas être publiée automatiquement (erreur « pas d'identifiant Cardmarket » dans le rapport).
 
 ## Organisation du code
 
 ```
 magicscanner/
-  cli.py              commandes (import, login, sync-expansions, serve, list, status, export)
+  cli.py              commandes (import, login, sync-expansions, serve, list, status, unlist, history, export)
   config.py           chemins, prix, Chrome, URLs des sources (surcharge MS_*)
   db.py               schéma SQLite et connexion
   inventory.py        stock : scans, annulation, correction, progression du listing
@@ -133,8 +136,9 @@ magicscanner/
     lister.py           mise en vente
   web/                interface de scan
     app.py              API FastAPI
-    static/             index.html, style.css, js/ (main, camera, preview, view, api, sound, dom)
-tests/                pytest ; tests/fixtures contient une vraie photo webcam
+    publisher.py        publication lancée depuis l'interface (tâche de fond, progression)
+    static/             index.html, style.css, js/ (main, camera, preview, publish, view, api, sound, dom)
+tests/                pytest ; tests/fixtures contient de vraies photos webcam (régressions de détection)
 ```
 
 ## Tests
@@ -155,4 +159,6 @@ pytest -m "not integration"   # sans la base importée
   de collection ; vérifier visuellement et corriger avec `1`–`9` si besoin.
 - Cartes split / aventure / à faces multiples : le nom lu est celui de la première face.
 - Les images de référence Scryfall sont mises en cache en 366 px (~46 Ko) : suffisant pour départager les éditions.
-- Foil non géré (toujours non-foil).
+- Foil non géré : les cartes sont toujours enregistrées en non-foil.
+- Vérifier le numéro de collection quand le choix est ambigu : le pied de carte est souvent illisible pour l'OCR.
+- Les images de scans ratés sont gardées (20 dernières) dans `data/scans/failed/` pour diagnostic.
