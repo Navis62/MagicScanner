@@ -5,11 +5,18 @@ let current = null;      // { scan_id, card, lang, alternatives, undone }
 let busy = false;
 
 // ---------- Webcam ----------
+async function videoInputs() {
+  return (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
+}
+
 async function listCameras() {
-  // Une première autorisation est nécessaire pour obtenir les libellés.
-  const tmp = await navigator.mediaDevices.getUserMedia({ video: true });
-  tmp.getTracks().forEach((t) => t.stop());
-  const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
+  let devices = await videoInputs();
+  if (!devices.some((d) => d.label)) {
+    // Libellés inconnus tant que l'accès n'a pas été autorisé une fois.
+    const tmp = await navigator.mediaDevices.getUserMedia({ video: true });
+    tmp.getTracks().forEach((t) => t.stop());
+    devices = await videoInputs();
+  }
   const sel = $("camera");
   sel.innerHTML = devices.map((d) => `<option value="${d.deviceId}">${d.label || "Caméra"}</option>`).join("");
   let saved = null;
@@ -20,14 +27,46 @@ async function listCameras() {
   await startCamera(sel.value);
 }
 
+let starting = false;
 async function startCamera(deviceId) {
-  if (video.srcObject) video.srcObject.getTracks().forEach((t) => t.stop());
-  video.srcObject = await navigator.mediaDevices.getUserMedia({
-    video: { deviceId: deviceId ? { exact: deviceId } : undefined, width: { ideal: 1920 }, height: { ideal: 1080 } },
-  });
-  try { localStorage.setItem("ms-camera", deviceId); } catch {}
+  if (starting) return;
+  starting = true;
+  try {
+    if (video.srcObject) video.srcObject.getTracks().forEach((t) => t.stop());
+    video.srcObject = null;
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { deviceId: deviceId ? { exact: deviceId } : undefined, width: { ideal: 1920 }, height: { ideal: 1080 } },
+    });
+    stream.getVideoTracks()[0].addEventListener("ended", () => restartCamera("flux coupé"));
+    video.srcObject = stream;
+    await video.play().catch(() => {});
+    try { localStorage.setItem("ms-camera", deviceId); } catch {}
+    setStatus("Caméra prête — pose une carte et appuie sur Espace");
+  } catch (e) {
+    const busyCam = e.name === "NotReadableError" || e.name === "AbortError";
+    setStatus(busyCam
+      ? "Caméra occupée (autre onglet ou application ?) — ferme-la puis clique « Relancer la caméra »"
+      : "Caméra indisponible : " + e.name + " " + e.message, "err");
+  } finally {
+    starting = false;
+  }
 }
 $("camera").addEventListener("change", (e) => startCamera(e.target.value));
+
+function restartCamera(reason) {
+  setStatus(`Caméra : ${reason}, relance…`, "busy");
+  startCamera($("camera").value);
+}
+$("cam-restart").addEventListener("click", () => restartCamera("relance manuelle"));
+
+// Chien de garde : si l'image n'avance plus pendant 4 s, on relance la caméra.
+let lastTime = -1, stalledSince = null;
+setInterval(() => {
+  if (starting || !video.srcObject || document.hidden) { stalledSince = null; return; }
+  if (video.currentTime !== lastTime) { lastTime = video.currentTime; stalledSince = null; return; }
+  stalledSince ??= Date.now();
+  if (Date.now() - stalledSince > 4000) { stalledSince = null; restartCamera("image figée"); }
+}, 1000);
 
 // ---------- Zoom de l'aperçu (affichage uniquement, la capture reste en pleine résolution) ----------
 const viewport = $("viewport");
