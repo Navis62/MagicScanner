@@ -21,7 +21,7 @@ class PublishJob:
 
     @staticmethod
     def _idle() -> dict:
-        return {"state": "idle", "total": 0, "done": 0, "current": None, "errors": [], "stopped": None,
+        return {"state": "idle", "total": 0, "done": 0, "line": 0, "lines": 0, "current": None, "errors": [], "stopped": None,
                 "dry_run": False}
 
     @property
@@ -51,10 +51,11 @@ class PublishJob:
         with self._lock:
             kind = event["event"]
             if kind == "start":
-                self._state["total"] = event["cards"]
+                self._state.update(total=event["cards"], lines=event["lines"])
+            elif kind == "item":
+                self._state.update(current=event["label"], line=event["index"])
             elif kind == "published":
                 self._state["done"] += event["amount"]
-                self._state["current"] = event["label"]
             elif kind == "error":
                 self._state["errors"].append({"label": event["label"], "message": event["message"]})
             elif kind == "end":

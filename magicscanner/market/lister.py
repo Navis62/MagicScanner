@@ -213,10 +213,11 @@ def run(con: sqlite3.Connection, submit: bool = False, confirm: bool = False, li
     try:
         with browser.cardmarket_page() as page:
             _ensure_logged_in(page)
-            for item in items:
+            for index, item in enumerate(items, 1):
                 if cancel and cancel.is_set():
                     summary.stopped = "arrêté à ta demande"
                     break
+                report({"event": "item", "label": item.label, "index": index, "lines": len(items)})
                 try:
                     summary.published += _list_item(con, page, item, submit, confirm, report, cancel)
                 except ListingError as e:

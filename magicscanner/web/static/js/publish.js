@@ -33,8 +33,11 @@ function showReport(job) {
   $("publish-report").hidden = false;
   $("publish-report").className = "report " + (done ? (job.stopped || job.errors.length ? "warn" : "ok") : "busy");
   if (!done) {
-    $("report-title").textContent = `Publication en cours : ${job.done} / ${job.total}`;
-    $("report-body").textContent = job.current ? `Dernière carte : ${job.current}` : "Chrome ouvre les pages Cardmarket…";
+    const pct = job.total ? Math.round((100 * job.done) / job.total) : 0;
+    $("report-title").textContent = `Publication en cours : ${job.done} / ${job.total} exemplaires (${pct} %)`;
+    $("report-body").innerHTML = `<div class="bar"><i style="width:${pct}%"></i></div>`
+      + `<p>${job.current ? `Carte ${job.line} / ${job.lines} : <b>${esc(job.current)}</b>` : "Chrome ouvre les pages Cardmarket…"}`
+      + (job.errors.length ? ` — <span class="stopped">${plural(job.errors.length, "erreur")}</span>` : "") + "</p>";
     return;
   }
   $("report-title").textContent = `Publication terminée : ${plural(job.done, "exemplaire")} mis en vente`
@@ -54,7 +57,7 @@ async function poll() {
   showReport(job);
   renderButtons();
   if (running) {
-    setStatus(`Publication Cardmarket : ${job.done} / ${job.total}`, "busy");
+    setStatus(`Publication Cardmarket : ${job.done} / ${job.total}${job.current ? " — " + job.current : ""}`, "busy");
     setTimeout(() => poll().catch(() => {}), POLL_MS);
   } else if (job.state === "done") {
     setStatus(job.stopped ? "Publication interrompue — voir le rapport" : "Publication terminée ✔", job.stopped ? "err" : "ok");
