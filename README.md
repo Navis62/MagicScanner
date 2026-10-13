@@ -105,8 +105,12 @@ et ce que la caméra a vu (« étincelle vue / douteuse / pas d'étincelle »). 
 99 % des cartes à étincelle sont détectées pour 0 % de fausses alertes. Si une carte est mal classée, `1`–`9` permet
 de choisir l'autre impression.
 
-Limite : l'étincelle n'a été validée que sur des images simulées, pas encore sur une vraie carte. Environ 1 carte `plst` sur 5 n'a pas d'identifiant Cardmarket dans Scryfall ; elle est reconnue mais
-ne peut pas être publiée automatiquement (erreur « pas d'identifiant Cardmarket » dans le rapport).
+Scryfall ne donne pas l'identifiant Cardmarket d'environ 1 carte `plst` sur 5. `magicscanner import` retrouve celui de
+583 d'entre elles par le nom, uniquement quand c'est sans équivoque (un seul produit de ce nom dans The List / Mystery
+Booster / Mystery Booster 2, pas déjà pris, une seule carte concernée). Les ~570 autres sont reconnues mais ne sont pas
+publiées automatiquement (erreur « pas d'identifiant Cardmarket » dans le rapport).
+
+Limite : l'étincelle n'a été validée que sur des images simulées, pas encore sur une vraie carte.
 
 ## Organisation du code
 

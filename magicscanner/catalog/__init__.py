@@ -23,3 +23,4 @@ def update(con: sqlite3.Connection, skip_download: bool = False) -> None:
     cardmarket.import_catalog(con)
     log.info("Correspondance éditions -> Cardmarket")
     cardmarket.map_sets(con)
+    cardmarket.link_list_cards(con)
