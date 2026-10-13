@@ -27,6 +27,9 @@ PROMO_LIKE_SETS = {"sld", "prm", "mb2", "fmb1"}
 # de départ la départage de l'original quand le symbole est douteux (les cartes ordinaires sont bien plus fréquentes).
 LIST_WEIGHT = 0.60
 LIST_PRIOR = -0.05
+# Le POC ne gère que le non-foil (le formulaire de vente décoche toujours « foil ») : une impression foil-only
+# (surge foil, etched…) ne peut pas être la carte posée sous la caméra, même si son image est identique à l'impression normale.
+NOT_NONFOIL = -0.30
 
 
 @dataclass(frozen=True)
@@ -47,6 +50,7 @@ class Candidate:
     visual: float
     symbol: float
     reasons: list[str] = field(default_factory=list)
+    cardmarket_id: int | None = None   # produit Cardmarket de l'impression (deux produits différents = annonces différentes)
 
 
 def printed_identity(p: sqlite3.Row) -> tuple[str, str]:
@@ -92,6 +96,8 @@ def score_printing(scan: np.ndarray, p: sqlite3.Row, ev: Evidence) -> Candidate:
         score += LIST_WEIGHT * ev.list_symbol + LIST_PRIOR
         if ev.list_symbol > 0.5:
             reasons.append("étincelle The List / Mystery Booster")
+    if p["finishes"] and "nonfoil" not in p["finishes"].split(","):
+        score += NOT_NONFOIL
     if ev.lang == "fr" and p["set_code"] not in ev.fr_sets:
         score += NOT_PRINTED_IN_FR
     if p["rarity"] in ("common", "uncommon"):
@@ -102,4 +108,4 @@ def score_printing(scan: np.ndarray, p: sqlite3.Row, ev: Evidence) -> Candidate:
         score += SAME_SET_AS_PREVIOUS
     score += NAME_WEIGHT * (ev.name_scores.get(p["oracle_id"], 0) / 100 - 1)
 
-    return Candidate(p["id"], round(score, 4), round(vis["score"], 3), round(vis["symbol"], 3), reasons)
+    return Candidate(p["id"], round(score, 4), round(vis["score"], 3), round(vis["symbol"], 3), reasons, p["cardmarket_id"])

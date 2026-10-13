@@ -11,6 +11,7 @@ from .scoring import Candidate, Evidence, score_printing
 
 NAME_TIE_MARGIN = 5     # noms gardés en lice s'ils sont à moins de 5 points du meilleur
 MAX_ORACLES = 3
+AMBIGUOUS_GAP = 0.15   # deux premières impressions plus proches que ça ET vendues dans des produits différents
 
 
 @dataclass
@@ -25,6 +26,7 @@ class Recognition:
     warped: np.ndarray | None = None
     corners: list | None = None
     list_symbol: float = 0.0   # confiance (0-1) que le symbole The List est présent
+    ambiguous: bool = False    # le choix entre deux produits Cardmarket différents ne tient qu'à peu de chose
 
     @property
     def best(self) -> Candidate | None:
@@ -36,6 +38,15 @@ def _confidence(name_score: float, candidates: list[Candidate]) -> float:
     second = candidates[1].score if len(candidates) > 1 else 0
     gap = candidates[0].score - second
     return round(min(1.0, (name_score / 100) * (0.5 + 2 * gap)), 3)
+
+
+def _ambiguous(candidates: list[Candidate]) -> bool:
+    """Se tromper entre deux impressions du même produit Cardmarket est sans conséquence ; entre deux produits
+    différents, l'annonce serait créée sur la mauvaise page."""
+    if len(candidates) < 2:
+        return False
+    first, second = candidates[0], candidates[1]
+    return first.score - second.score < AMBIGUOUS_GAP and first.cardmarket_id != second.cardmarket_id
 
 
 class Recognizer:
@@ -86,4 +97,5 @@ class Recognizer:
         if rec.candidates:
             rec.ok = True
             rec.confidence = _confidence(best_name.score, rec.candidates)
+            rec.ambiguous = _ambiguous(rec.candidates)
         return rec

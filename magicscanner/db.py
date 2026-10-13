@@ -21,7 +21,9 @@ CREATE TABLE IF NOT EXISTS cards (
     layout TEXT,
     frame TEXT,
     promo INTEGER DEFAULT 0,
-    set_type TEXT
+    set_type TEXT,
+    finishes TEXT,        -- « nonfoil,foil » : une impression foil-only ne peut pas être une carte non-foil
+    promo_types TEXT      -- « surgefoil,universesbeyond »…
 );
 CREATE INDEX IF NOT EXISTS idx_cards_oracle ON cards(oracle_id);
 CREATE INDEX IF NOT EXISTS idx_cards_set_num ON cards(set_code, collector_number);
@@ -137,9 +139,18 @@ def connect(path: Path | str = DB_PATH) -> sqlite3.Connection:
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA foreign_keys=ON")
     con.executescript(SCHEMA)
+    _migrate(con)
     backfill_listings(con)
     con.commit()
     return con
+
+
+def _migrate(con: sqlite3.Connection) -> None:
+    """Colonnes ajoutées après la création des bases existantes (CREATE TABLE IF NOT EXISTS ne les ajoute pas)."""
+    columns = {r["name"] for r in con.execute("PRAGMA table_info(cards)")}
+    for column in ("finishes", "promo_types"):
+        if column not in columns:
+            con.execute(f"ALTER TABLE cards ADD COLUMN {column} TEXT")
 
 
 def backfill_listings(con: sqlite3.Connection) -> None:

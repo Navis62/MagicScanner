@@ -50,7 +50,7 @@ const scan = safe(async () => {
     showAlternatives();
     const low = r.needs_review;
     view.setResultState(low ? "warn" : "ok");
-    view.setStatus(low ? "Ajoutée — à vérifier (confiance faible)" : "Ajoutée ✔ — Espace pour la suivante", low ? "busy" : "ok");
+    view.setStatus(low ? `Ajoutée — à vérifier (${r.review_reason})` : "Ajoutée ✔ — Espace pour la suivante", low ? "busy" : "ok");
     low ? sound.check() : sound.ok();
     refresh(r.stats);
   } finally {

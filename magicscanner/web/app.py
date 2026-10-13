@@ -2,6 +2,7 @@
 import base64
 import sqlite3
 import threading
+import time
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -72,6 +73,26 @@ def _card(card_id: str, lang: str | None = None, candidate: Candidate | None = N
     return info
 
 
+def _review_reason(rec) -> str | None:
+    if rec.confidence < LOW_CONFIDENCE:
+        return "confiance faible"
+    if rec.ambiguous:
+        return "plusieurs extensions Cardmarket possibles"
+    return None
+
+
+FAILED_KEPT = 20
+
+
+def _keep_failed_frame(frame: np.ndarray) -> None:
+    """Garde les dernières images des scans ratés (data/scans/failed/) pour comprendre ce qui s'est passé."""
+    folder = SCANS_DIR / "failed"
+    folder.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(folder / f"{time.strftime('%Y%m%d-%H%M%S')}.jpg"), frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+    for old in sorted(folder.glob("*.jpg"))[:-FAILED_KEPT]:
+        old.unlink()
+
+
 def _jpeg_data_url(img: np.ndarray) -> str:
     ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 80])
     return "data:image/jpeg;base64," + base64.b64encode(buf).decode() if ok else ""
@@ -103,6 +124,7 @@ async def scan(image: UploadFile = File(...)):
             "warped": _jpeg_data_url(rec.warped) if rec.warped is not None else None,
         }
         if not rec.ok:
+            _keep_failed_frame(frame)
             return out
         best = rec.best
         scan_id = inventory.add_scan(svc.con, best.card_id, rec.lang, rec.confidence, " | ".join(rec.lines))
@@ -112,7 +134,8 @@ async def scan(image: UploadFile = File(...)):
         svc.previous_set = card["set_code"]
         return out | {
             "scan_id": scan_id,
-            "needs_review": rec.confidence < LOW_CONFIDENCE,
+            "needs_review": rec.confidence < LOW_CONFIDENCE or rec.ambiguous,
+            "review_reason": _review_reason(rec),
             "card": card,
             "alternatives": [_card(c.card_id, candidate=c) for c in rec.candidates[1:1 + MAX_ALTERNATIVES]],
             "stats": inventory.stats(svc.con),

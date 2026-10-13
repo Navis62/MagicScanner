@@ -19,7 +19,8 @@ log = logging.getLogger(__name__)
 SKIP_LAYOUTS = {"token", "double_faced_token", "emblem", "art_series", "vanguard", "planar", "scheme", "reversible_card"}
 SKIP_SET_TYPES = {"token", "memorabilia", "minigame", "alchemy", "vanguard", "treasure_chest"}
 CARD_COLUMNS = ("id", "oracle_id", "name", "front_name", "set_code", "collector_number", "rarity", "cardmarket_id",
-                "image_normal", "image_small", "released_at", "layout", "frame", "promo", "set_type")
+                "image_normal", "image_small", "released_at", "layout", "frame", "promo", "set_type",
+                "finishes", "promo_types")
 
 
 def download_bulk(force: bool = False) -> Path:
@@ -97,6 +98,7 @@ def import_cards(con: sqlite3.Connection, path: Path) -> None:
                 c["id"], oracle_id, c["name"], _front(c, "name"), c["set"], c["collector_number"], c.get("rarity"),
                 c.get("cardmarket_id"), _image(c, "normal"), _image(c, "small"), c.get("released_at"),
                 c.get("layout"), c.get("frame"), int(bool(c.get("promo"))), c.get("set_type"),
+                ",".join(c.get("finishes", [])), ",".join(c.get("promo_types", [])),
             ))
             names.add((oracle_id, "en", _front(c, "name")))
         else:
