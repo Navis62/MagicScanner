@@ -17,6 +17,7 @@ from .. import db, inventory
 from ..catalog import Catalog
 from ..config import SCANS_DIR, ensure_dirs
 from ..recognition import Candidate, Recognizer, detect
+from .publisher import PublishJob
 
 STATIC = Path(__file__).parent / "static"
 MAX_ALTERNATIVES = 11
@@ -32,6 +33,7 @@ class Services:
 
 
 svc: Services
+publisher = PublishJob()
 
 
 @asynccontextmanager
@@ -54,12 +56,17 @@ class CardChoice(BaseModel):
     lang: str
 
 
+class PublishRequest(BaseModel):
+    limit: int | None = None   # n'en publier que quelques-unes (premiers essais)
+    dry_run: bool = False      # remplit les formulaires sans rien publier
+
+
 # --- Helpers ------------------------------------------------------------------------------------------------
 
 def _card(card_id: str, lang: str | None = None, candidate: Candidate | None = None) -> dict:
-    """Fiche pour l'UI : référentiel + quantité en stock (+ détail du score si candidate)."""
+    """Fiche pour l'UI : référentiel + stock (quantité, dont déjà publiées) (+ détail du score si candidate)."""
     info = svc.catalog.card_info(card_id, lang)
-    info["quantity"] = inventory.quantity(svc.con, card_id, lang) if lang else 0
+    info["quantity"], info["listed"] = inventory.quantity(svc.con, card_id, lang) if lang else (0, 0)
     if candidate:
         info.update(asdict(candidate))
     return info
@@ -128,7 +135,11 @@ def add_manual(body: CardChoice):
 @app.post("/api/scans/{scan_id}/undo")
 def undo(scan_id: int):
     with svc.lock:
-        if not inventory.undo_scan(svc.con, scan_id):
+        try:
+            undone = inventory.undo_scan(svc.con, scan_id)
+        except inventory.AlreadyListed as e:
+            raise HTTPException(409, str(e))
+        if not undone:
             raise HTTPException(404, "scan introuvable ou déjà annulé")
         return {"ok": True, "stats": inventory.stats(svc.con)}
 
@@ -136,7 +147,11 @@ def undo(scan_id: int):
 @app.post("/api/scans/{scan_id}/reassign")
 def reassign(scan_id: int, body: CardChoice):
     with svc.lock:
-        if not inventory.reassign_scan(svc.con, scan_id, body.card_id, body.lang):
+        try:
+            moved = inventory.reassign_scan(svc.con, scan_id, body.card_id, body.lang)
+        except inventory.AlreadyListed as e:
+            raise HTTPException(409, str(e))
+        if not moved:
             raise HTTPException(404, "scan introuvable ou annulé")
         card = _card(body.card_id, body.lang)
         svc.previous_set = card["set_code"]
@@ -162,3 +177,28 @@ def recent(limit: int = 30):
     with svc.lock:
         return [{"scan_id": s["id"], "lang": s["lang"], **_card(s["card_id"], s["lang"])}
                 for s in inventory.recent_scans(svc.con, limit)]
+
+
+# --- Publication Cardmarket ----------------------------------------------------------------------------------
+
+@app.get("/api/publish")
+def publish_status():
+    return publisher.snapshot()
+
+
+@app.post("/api/publish")
+def publish(body: PublishRequest | None = None):
+    """Met en vente sur Cardmarket les exemplaires pas encore publiés (la différence stock - publiées)."""
+    body = body or PublishRequest()
+    with svc.lock:
+        if inventory.stats(svc.con)["to_list"] == 0:
+            raise HTTPException(400, "Rien à publier : tout le stock est déjà en vente.")
+    if not publisher.start(submit=not body.dry_run, limit=body.limit):
+        raise HTTPException(409, "Une publication est déjà en cours.")
+    return publisher.snapshot()
+
+
+@app.post("/api/publish/stop")
+def publish_stop():
+    publisher.stop()
+    return publisher.snapshot()

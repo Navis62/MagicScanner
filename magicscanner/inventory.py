@@ -8,6 +8,10 @@ import sqlite3
 from .config import DEFAULT_CONDITION, DEFAULT_PRICE
 
 
+class AlreadyListed(Exception):
+    """L'exemplaire est déjà en vente sur Cardmarket : on ne peut pas le retirer du stock d'ici."""
+
+
 def _line_id(con: sqlite3.Connection, card_id: str, lang: str) -> int:
     """Ligne d'inventaire de (carte, langue) aux conditions par défaut, créée si besoin."""
     con.execute(
@@ -40,10 +44,17 @@ def add_scan(con: sqlite3.Connection, card_id: str, lang: str, confidence: float
     return cur.lastrowid
 
 
+def _check_removable(con: sqlite3.Connection, line_id: int) -> None:
+    line = con.execute("SELECT quantity, listed_quantity FROM inventory WHERE id=?", (line_id,)).fetchone()
+    if line["quantity"] - 1 < line["listed_quantity"]:
+        raise AlreadyListed("Cet exemplaire est déjà publié sur Cardmarket : retire l'annonce là-bas, pas ici.")
+
+
 def undo_scan(con: sqlite3.Connection, scan_id: int) -> bool:
     scan = _active_scan(con, scan_id)
     if scan is None:
         return False
+    _check_removable(con, scan["inventory_id"])
     _add(con, scan["inventory_id"], -1)
     con.execute("UPDATE scans SET undone=1 WHERE id=?", (scan_id,))
     con.commit()
@@ -55,6 +66,7 @@ def reassign_scan(con: sqlite3.Connection, scan_id: int, card_id: str, lang: str
     scan = _active_scan(con, scan_id)
     if scan is None:
         return False
+    _check_removable(con, scan["inventory_id"])
     _add(con, scan["inventory_id"], -1)
     line_id = _line_id(con, card_id, lang)
     _add(con, line_id, 1)
@@ -63,12 +75,13 @@ def reassign_scan(con: sqlite3.Connection, scan_id: int, card_id: str, lang: str
     return True
 
 
-def quantity(con: sqlite3.Connection, card_id: str, lang: str) -> int:
+def quantity(con: sqlite3.Connection, card_id: str, lang: str) -> tuple[int, int]:
+    """(en stock, déjà publiées sur Cardmarket) pour cette carte dans cette langue."""
     row = con.execute(
-        "SELECT quantity FROM inventory WHERE card_id=? AND lang=? AND condition=? AND price=?",
+        "SELECT quantity, listed_quantity FROM inventory WHERE card_id=? AND lang=? AND condition=? AND price=?",
         (card_id, lang, DEFAULT_CONDITION, DEFAULT_PRICE),
     ).fetchone()
-    return row["quantity"] if row else 0
+    return (row["quantity"], row["listed_quantity"]) if row else (0, 0)
 
 
 def recent_scans(con: sqlite3.Connection, limit: int) -> list[sqlite3.Row]:
@@ -94,6 +107,8 @@ def stats(con: sqlite3.Connection) -> dict:
         """SELECT COALESCE(SUM(quantity), 0) AS cards,
                   COUNT(CASE WHEN quantity > 0 THEN 1 END) AS lines,
                   COALESCE(SUM(MAX(quantity - listed_quantity, 0)), 0) AS to_list,
+                  COUNT(CASE WHEN quantity > listed_quantity THEN 1 END) AS lines_to_list,
+                  COALESCE(SUM(MAX(quantity - listed_quantity, 0) * price), 0) AS to_list_value,
                   COALESCE(SUM(listed_quantity), 0) AS listed,
                   COALESCE(SUM(quantity * price), 0) AS value
            FROM inventory"""

@@ -66,3 +66,18 @@ a { color: var(--accent); word-break: break-all; }
 .recent { grid-column: 1 / -1; }
 .recent ol { margin: 0; padding-left: 20px; columns: 2; color: var(--muted); }
 .recent li b { color: var(--text); font-weight: 500; }
+
+.publish { display: flex; gap: 8px; }
+.publish button { padding: 6px 12px; }
+.publish button:disabled { opacity: .45; cursor: default; }
+button[hidden] { display: none; }
+
+.report { margin: 14px 14px 0; padding: 10px 14px; border-radius: var(--radius); background: var(--panel); border-left: 4px solid var(--muted); }
+.report.busy { border-color: var(--accent); }
+.report.ok { border-color: var(--ok); }
+.report.warn { border-color: var(--warn); }
+.report-head { display: flex; justify-content: space-between; align-items: center; }
+.report-head button { padding: 0 8px; background: none; border: none; color: var(--muted); }
+.report ul { margin: 6px 0 0; padding-left: 20px; color: var(--muted); }
+.report p { margin: 6px 0 0; color: var(--muted); }
+.report .stopped { color: var(--warn); font-weight: 600; }

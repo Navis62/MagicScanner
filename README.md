@@ -51,6 +51,21 @@ si la carte vaut plus de 1 € (`MS_PRICE_ALERT`).
 
 ## Mettre en vente
 
+**Depuis l'interface** : le bouton « Publier N cartes sur Cardmarket » (en haut) met en vente tout ce qui ne l'est
+pas encore, après confirmation. « Tester avec 1 » n'en publie qu'une, pour un premier essai. Un rapport s'affiche
+à la fin (cartes publiées, erreurs) et « Arrêter » interrompt proprement après la carte en cours. Tu peux continuer
+à scanner pendant la publication : les nouvelles cartes seront publiées au clic suivant.
+
+**Exemplaires déjà publiés** : le stock distingue « en stock » et « déjà en vente ». Scanner un 2e exemplaire d'une
+carte déjà publiée n'annonce que ce 2e exemplaire (l'écran de scan indique « dont 1 déjà en vente — 1 à publier »).
+Un exemplaire déjà publié ne peut plus être annulé ni corrigé depuis l'outil : il faut retirer l'annonce sur Cardmarket.
+
+**Sécurité** : une annonce n'est comptée comme publiée qu'après le bandeau de confirmation vert de Cardmarket. Si le
+site ne confirme ni n'affiche d'erreur, tout s'arrête (capture dans `data/publish-debug/`) plutôt que de risquer des
+doublons. Si tu n'es pas connecté à Cardmarket, rien n'est tenté.
+
+**En ligne de commande** :
+
 ```powershell
 magicscanner list                        # dry-run : ouvre chaque page, remplit, ne publie pas
 magicscanner list --submit --confirm --limit 5   # premiers essais : confirmation carte par carte

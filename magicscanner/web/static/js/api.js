@@ -1,7 +1,7 @@
 // Appels à l'API du serveur local.
 async function request(url, options = {}) {
   const r = await fetch(url, options);
-  if (!r.ok) throw new Error(`${r.status} ${(await r.json().catch(() => ({}))).detail || r.statusText}`);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
   return r.json();
 }
 
@@ -23,4 +23,7 @@ export const api = {
   search: (q) => request("/api/search?q=" + encodeURIComponent(q)),
   stats: () => request("/api/stats"),
   recent: (limit = 20) => request(`/api/recent?limit=${limit}`),
+  publishStatus: () => request("/api/publish"),
+  publish: (options = {}) => postJson("/api/publish", options),
+  publishStop: () => request("/api/publish/stop", { method: "POST" }),
 };

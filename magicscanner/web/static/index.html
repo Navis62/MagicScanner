@@ -15,8 +15,21 @@
     <span>À lister <b id="st-tolist">0</b></span>
     <span>Valeur <b id="st-value">0 €</b></span>
   </div>
+  <div class="publish">
+    <button id="btn-publish" class="primary" disabled>Rien à publier</button>
+    <button id="btn-publish-one" title="Publie une seule carte pour vérifier que tout se passe bien" disabled>Tester avec 1</button>
+    <button id="btn-publish-stop" class="danger" hidden>Arrêter</button>
+  </div>
   <select id="camera" title="Caméra"></select>
 </header>
+
+<div id="publish-report" class="report" hidden>
+  <div class="report-head">
+    <b id="report-title"></b>
+    <button id="report-close" title="Fermer">✕</button>
+  </div>
+  <div id="report-body"></div>
+</div>
 
 <main>
   <section class="cam">

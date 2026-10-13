@@ -3,6 +3,7 @@ import { api } from "./api.js";
 import { grabFrame, initCamera, isReady } from "./camera.js";
 import { $ } from "./dom.js";
 import { frameOnCard, initPreview, isDefaultZoom } from "./preview.js";
+import { initPublish, updateToList } from "./publish.js";
 import { sound } from "./sound.js";
 import * as view from "./view.js";
 
@@ -18,7 +19,9 @@ const editable = () => current && current.mode === "scan" && !current.undone;
 const safe = (fn) => (...args) => fn(...args).catch((e) => view.setStatus("Erreur : " + e.message, "err"));
 
 async function refresh(stats) {
-  view.showStats(stats ?? await api.stats());
+  stats ??= await api.stats();
+  view.showStats(stats);
+  updateToList(stats);
   view.showRecent(await api.recent());
 }
 
@@ -136,6 +139,7 @@ function init() {
   // Après un clic, le focus revient à la page : Espace scanne au lieu de re-cliquer le bouton.
   document.addEventListener("click", (e) => e.target.closest("button")?.blur());
   initPreview();
+  initPublish(() => refresh());
   initCamera().catch((e) => view.setStatus("Caméra indisponible : " + e.message, "err"));
   refresh();
 }

@@ -41,7 +41,10 @@ export function showCard(card, lang, confidence = null) {
     ? `${card.trend.toFixed(2)} €${card.price_alert ? " ⚠ vaut plus que le prix de vente !" : ""}`
     : "—";
   trend.className = card.price_alert ? "alert" : "";
-  $("qty").textContent = card.quantity;
+  const toList = card.quantity - (card.listed || 0);
+  $("qty").textContent = card.listed
+    ? `${card.quantity} (dont ${card.listed} déjà en vente sur Cardmarket — ${Math.max(toList, 0)} à publier)`
+    : `${card.quantity}`;
   const link = $("cm-url");
   link.href = card.cardmarket_url || "#";
   link.textContent = card.cardmarket_url || "URL introuvable";
