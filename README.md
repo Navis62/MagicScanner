@@ -52,7 +52,7 @@ si la carte vaut plus de 1 € (`MS_PRICE_ALERT`).
 ## Mettre en vente
 
 **Depuis l'interface** : le bouton « Publier N cartes sur Cardmarket » (en haut) met en vente tout ce qui ne l'est
-pas encore, après confirmation. « Tester avec 1 » n'en publie qu'une, pour un premier essai. Un rapport s'affiche
+pas encore, après confirmation. Un rapport s'affiche
 à la fin (cartes publiées, erreurs) et « Arrêter » interrompt proprement après la carte en cours. Tu peux continuer
 à scanner pendant la publication : les nouvelles cartes seront publiées au clic suivant.
 
