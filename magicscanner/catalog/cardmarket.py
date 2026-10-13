@@ -11,6 +11,9 @@ from .download import download
 
 log = logging.getLogger(__name__)
 
+# plst (The List + Mystery Booster) : réparti entre The List, Mystery Booster, Mystery Booster 2, Secret Lair…
+MULTI_EXPANSION_SETS = {"plst"}
+
 
 def import_catalog(con: sqlite3.Connection) -> None:
     products = json.loads(download(CM_PRODUCTS_URL, CARDMARKET_DIR / "products_singles.json").read_text(encoding="utf-8"))["products"]
@@ -49,6 +52,11 @@ def map_sets(con: sqlite3.Connection) -> None:
     confirmed = 0
     for s in con.execute("SELECT code, name FROM sets WHERE cm_slug_source IS NOT 'manual'").fetchall():
         exp = votes[s["code"]].most_common(1)[0][0] if votes.get(s["code"]) else None
+        if s["code"] in MULTI_EXPANSION_SETS:
+            # Les cartes de cette édition se vendent dans plusieurs extensions Cardmarket : un slug « majoritaire »
+            # pointerait vers la page d'une autre version. Seul l'idProduct de chaque carte fait foi.
+            con.execute("UPDATE sets SET cm_id_expansion=NULL, cm_slug=NULL, cm_slug_source='none' WHERE code=?", (s["code"],))
+            continue
         if exp in official:
             slug, source = official[exp], "cardmarket"
             confirmed += 1

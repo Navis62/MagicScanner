@@ -24,12 +24,12 @@ export function showStats(st) {
 export function showScanDebug(warped, ocrLines, listSymbol = null) {
   $("warped").src = warped || "";
   $("ocr").textContent = (ocrLines || []).join("\n");
-  // Symbole The List (étincelle en bas à gauche) : on montre ce que la caméra a vu, pour pouvoir le vérifier.
+  // Étincelle de Planeswalker (en bas à gauche : The List ou Mystery Booster) : on montre ce que la caméra a vu.
   const chip = $("list-chip");
   chip.hidden = listSymbol == null;
   if (listSymbol != null) {
     const seen = listSymbol >= 0.7, unsure = listSymbol > 0.45 && !seen;
-    chip.textContent = seen ? "symbole The List vu" : unsure ? "symbole The List douteux" : "pas de symbole The List";
+    chip.textContent = seen ? "étincelle vue (List / Mystery Booster)" : unsure ? "étincelle douteuse" : "pas d'étincelle";
     chip.className = "chip list " + (seen ? "yes" : unsure ? "maybe" : "no");
   }
 }
@@ -56,6 +56,7 @@ export function showCard(card, lang, confidence = null, needsReview = false) {
   $("set-name").textContent = `${card.set_name} (${card.set_code.toUpperCase()}) — ${card.set_date || ""}`;
   $("number").textContent = card.collector_number;
   $("list-badge").hidden = !card.is_list;
+  $("list-badge").textContent = card.list_label || "";
   $("cm-exp").textContent = card.cm_expansion || "—";
   const trend = $("trend");
   trend.textContent = card.trend != null

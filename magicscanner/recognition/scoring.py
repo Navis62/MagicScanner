@@ -9,7 +9,7 @@ from rapidfuzz import fuzz
 from . import visual
 from .ocr import CollectorInfo
 
-LIST_SET = "plst"          # « The List » dans Scryfall : numéros de la forme « M20-4 » (édition d'origine - numéro)
+LIST_SET = "plst"          # The List + Mystery Booster dans Scryfall : numéros « M20-4 » (édition d'origine - numéro)
 
 # Poids de la ressemblance visuelle.
 W_GLOBAL, W_SYMBOL, W_COLOR = 0.45, 0.45, 0.10
@@ -23,7 +23,7 @@ PROMO = -0.08
 SAME_SET_AS_PREVIOUS = 0.05  # les piles sont souvent triées par édition
 NAME_WEIGHT = 0.20         # × (score du nom - 100 %)
 PROMO_LIKE_SETS = {"sld", "prm", "mb2", "fmb1"}
-# Symbole The List : indice signé (+1 présent, -1 absent) × poids, réservé à l'édition The List. Le léger malus
+# Étincelle (The List / Mystery Booster) : indice signé (+1 présente, -1 absente) × poids, réservé à l'édition plst. Le léger malus
 # de départ la départage de l'original quand le symbole est douteux (les cartes ordinaires sont bien plus fréquentes).
 LIST_WEIGHT = 0.60
 LIST_PRIOR = -0.05
@@ -91,7 +91,7 @@ def score_printing(scan: np.ndarray, p: sqlite3.Row, ev: Evidence) -> Candidate:
     if is_list:
         score += LIST_WEIGHT * ev.list_symbol + LIST_PRIOR
         if ev.list_symbol > 0.5:
-            reasons.append("symbole The List")
+            reasons.append("étincelle The List / Mystery Booster")
     if ev.lang == "fr" and p["set_code"] not in ev.fr_sets:
         score += NOT_PRINTED_IN_FR
     if p["rarity"] in ("common", "uncommon"):

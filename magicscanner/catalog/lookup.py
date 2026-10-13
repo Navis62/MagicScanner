@@ -28,6 +28,14 @@ def normalize(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", s).strip()
 
 
+def list_label(cm_expansion: str | None) -> str:
+    """Nom à afficher pour une carte à l'étincelle (édition « plst » de Scryfall). Scryfall y regroupe The List et
+    Mystery Booster : c'est l'extension Cardmarket de la carte qui dit laquelle des deux (ou Mystery Booster 2…)."""
+    if not cm_expansion:
+        return "The List / Mystery Booster"
+    return "Mystery Booster 2" if cm_expansion.startswith("Mystery Booster 2") else cm_expansion
+
+
 @dataclass(frozen=True)
 class NameMatch:
     oracle_id: str
@@ -92,6 +100,7 @@ class Catalog:
             "image": c["fr_image"] if lang == "fr" and c["fr_image"] else c["image_normal"],
             "image_small": c["image_small"],
             "is_list": c["set_code"] == "plst",
+            "list_label": list_label(expansion["name"] if expansion else None) if c["set_code"] == "plst" else None,
             "cm_expansion": expansion["name"] if expansion else None,
             "cardmarket_id": c["cardmarket_id"],
             "cardmarket_url": urls.product_url(self.con, card_id),

@@ -1,8 +1,10 @@
-"""Détection du symbole « The List » : l'étincelle de Planeswalker, dans la bordure noire en bas à gauche.
+"""Détection de l'étincelle de Planeswalker, dans la bordure noire en bas à gauche : la marque des cartes
+« The List » et « Mystery Booster » (Scryfall les regroupe toutes dans l'édition « plst »).
 
-Les cartes The List sont identiques à leur impression d'origine (même cadre, même numéro, même code d'édition)
-sauf pour ce petit symbole, au même endroit quelle que soit l'époque du cadre. C'est donc le seul indice visuel
-qui les distingue de l'original (extension Cardmarket et prix différents).
+Ces cartes sont identiques à leur impression d'origine (même cadre, même numéro, même code d'édition) sauf pour
+ce petit symbole, au même endroit quelle que soit l'époque du cadre. C'est donc le seul indice visuel qui les
+distingue de l'original (autre extension Cardmarket, autre prix). Laquelle des deux (The List, Mystery Booster,
+Mystery Booster 2…) dépend de la carte : ce n'est pas visible, c'est l'identifiant Cardmarket de Scryfall qui le dit.
 
 Gabarit : assets/list_symbol.png, recadré sur l'étincelle d'une image Scryfall « large » de The List
 (Angel of Vitality, M20-4), ramené à 630×880 comme nos cartes redressées.

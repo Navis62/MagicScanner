@@ -41,3 +41,20 @@ def test_remembered_url_comes_first(con):
 
 def test_unknown_card_has_no_url(con):
     assert urls.candidate_urls(con, "nope") == []
+
+
+def test_plst_never_gets_a_set_level_guess(con):
+    """The List / Mystery Booster : sans idProduct, aucune adresse (celle de l'autre version serait fausse)."""
+    from magicscanner.catalog import cardmarket
+
+    con.execute("INSERT INTO sets (code, name, cm_slug, cm_slug_source) VALUES ('plst', 'The List', 'Mystery-Booster', 'cardmarket')")
+    con.executemany(
+        "INSERT INTO cards (id, oracle_id, name, front_name, set_code, collector_number, cardmarket_id) VALUES (?,?,?,?,?,?,?)",
+        [("efd-mb", "o-efd", "Extract from Darkness", "Extract from Darkness", "plst", "E01-84", 252482),
+         ("efd-list", "o-efd", "Extract from Darkness", "Extract from Darkness", "plst", "2X2-210", None)],
+    )
+    cardmarket.map_sets(con)
+    assert urls.candidate_urls(con, "efd-list") == []                  # pas de produit connu -> pas de lien trompeur
+    # Avec un produit connu, l'adresse vient de l'extension de ce produit (ici celle du produit 252482), pas de l'édition.
+    assert urls.candidate_urls(con, "efd-mb")[0].startswith(f"{BASE}/Dark-Ascension/")
+    assert con.execute("SELECT cm_slug FROM sets WHERE code='plst'").fetchone()[0] is None

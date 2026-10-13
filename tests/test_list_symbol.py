@@ -87,3 +87,15 @@ def test_the_list_print_wins_over_the_original_only_with_the_symbol():
     assert catalog.card_info(original.best.card_id)["set_code"] == "m20"
     assert on_list.list_symbol >= list_symbol.PRESENT > list_symbol.ABSENT > original.list_symbol
     con.close()
+
+
+@pytest.mark.parametrize("expansion, label", [
+    ("Mystery Booster", "Mystery Booster"),
+    ("The List", "The List"),
+    ("Mystery Booster 2: Reprints from Across Magic's History", "Mystery Booster 2"),
+    (None, "The List / Mystery Booster"),   # extension inconnue : on ne tranche pas
+])
+def test_label_names_the_real_cardmarket_expansion(expansion, label):
+    from magicscanner.catalog.lookup import list_label
+
+    assert list_label(expansion) == label
