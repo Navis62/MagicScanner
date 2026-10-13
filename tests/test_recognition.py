@@ -44,3 +44,13 @@ def test_recognizes_printing_and_language(frame):
     assert best["fr_name"] == "Gargantua phyrexian"
     assert rec.confidence > 0.5
     con.close()
+
+
+def test_reference_images_are_cached_in_reduced_size(tmp_path):
+    from magicscanner.recognition import visual
+
+    big = np.random.default_rng(0).integers(0, 255, (680, 488, 3), dtype=np.uint8)
+    path = tmp_path / "ref.jpg"
+    small = visual._store(path, big)
+    assert small.shape[1] == visual.STORED_WIDTH
+    assert cv2.imread(str(path)).shape[1] == visual.STORED_WIDTH

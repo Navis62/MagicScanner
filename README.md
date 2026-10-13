@@ -126,4 +126,5 @@ pytest -m "not integration"   # sans la base importée
 - Rééditions à illustration et cadre identiques : départagées surtout par le symbole d'édition et le numéro
   de collection ; vérifier visuellement et corriger avec `1`–`9` si besoin.
 - Cartes split / aventure / à faces multiples : le nom lu est celui de la première face.
+- Les images de référence Scryfall sont mises en cache en 366 px (~46 Ko) : suffisant pour départager les éditions.
 - Foil non géré (toujours non-foil).

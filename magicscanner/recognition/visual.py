@@ -16,18 +16,35 @@ from .detect import CARD_H, CARD_W
 _client = httpx.Client(headers=SCRYFALL_HEADERS, timeout=20, follow_redirects=True)
 
 
+# Images de référence stockées en réduit : ~46 Ko au lieu de ~93 Ko, classement des éditions identique
+# (mesuré sur les impressions d'une même carte ; en dessous de ~315 px de large des éditions proches s'échangent).
+STORED_WIDTH = 366
+STORED_QUALITY = 80
+
+
+def _store(path, img: np.ndarray) -> np.ndarray:
+    small = cv2.resize(img, (STORED_WIDTH, round(STORED_WIDTH * CARD_H / CARD_W)), interpolation=cv2.INTER_AREA)
+    cv2.imwrite(str(path), small, [cv2.IMWRITE_JPEG_QUALITY, STORED_QUALITY])
+    return small
+
+
 def fetch_image(url: str) -> np.ndarray | None:
-    """Image Scryfall (cache disque), redimensionnée au format des cartes redressées."""
+    """Image Scryfall (cache disque réduit), remise au format des cartes redressées."""
     IMAGE_CACHE.mkdir(parents=True, exist_ok=True)
     path = IMAGE_CACHE / (hashlib.sha1(url.split("?")[0].encode()).hexdigest() + ".jpg")
-    if not path.exists():
+    if path.exists():
+        img = cv2.imread(str(path))
+        if img is not None and img.shape[1] > STORED_WIDTH:   # ancien cache en taille d'origine : on réduit au passage
+            img = _store(path, img)
+    else:
         try:
             r = _client.get(url)
             r.raise_for_status()
         except httpx.HTTPError:
             return None
-        path.write_bytes(r.content)
-    img = cv2.imread(str(path))
+        img = cv2.imdecode(np.frombuffer(r.content, np.uint8), cv2.IMREAD_COLOR)
+        if img is not None:
+            img = _store(path, img)
     if img is None:
         return None
     return cv2.resize(img, (CARD_W, CARD_H), interpolation=cv2.INTER_AREA)
