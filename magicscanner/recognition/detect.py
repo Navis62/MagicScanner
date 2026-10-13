@@ -2,6 +2,8 @@
 import cv2
 import numpy as np
 
+from . import card_rect
+
 CARD_W, CARD_H = 630, 880
 RATIO = 63 / 88
 
@@ -59,7 +61,9 @@ def find_card(frame: np.ndarray) -> np.ndarray | None:
                         best, best_score = approx.reshape(4, 2), sc
                     break
     if best is None:
-        return None
+        # Contours fusionnés avec la boîte ou la pile de cartes : on cherche plutôt un rectangle bien soutenu par des bords.
+        rect = card_rect.find_rect(small)
+        return None if rect is None else _order(rect / scale)
     return _order(best / scale)
 
 

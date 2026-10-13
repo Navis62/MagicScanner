@@ -118,7 +118,9 @@ magicscanner/
     cardmarket.py       import du catalogue et des prix Cardmarket, rattachement éditions -> extensions
     lookup.py           Catalog : recherche floue des noms, impressions, fiche d'affichage
   recognition/        image webcam -> impression
-    detect.py           localisation et redressement de la carte
+    detect.py           localisation et redressement de la carte (contours)
+    card_rect.py        détection de secours : rectangle aux proportions de carte dont les bords sont les mieux soutenus
+                        (carte collée à la paroi de la boîte, pile de cartes, bord noir peu visible)
     ocr.py              RapidOCR + extraction du titre, du numéro, du code d'édition, de la langue
     visual.py           comparaison avec les images Scryfall (cadre, symbole d'édition)
     list_symbol.py      détection de l'étincelle « The List » (gabarit dans assets/)
