@@ -20,7 +20,7 @@ Une impression = la fiche anglaise Scryfall (qui porte le `cardmarket_id`). L'in
 
 ```powershell
 python -m venv .venv
-.\.venv\Scriptsctivate
+..venvScriptsctivate
 pip install -e ".[dev]"
 magicscanner import            # ~400 Mo Scryfall + catalogue Cardmarket (quelques minutes)
 magicscanner login             # ouvre Chrome (profil data/chrome-profile) : se connecter à Cardmarket
