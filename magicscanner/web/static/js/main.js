@@ -46,7 +46,7 @@ const scan = safe(async () => {
       return;
     }
     current = { mode: "scan", scanId: r.scan_id, card: r.card, lang: r.lang, alternatives: r.alternatives };
-    view.showCard(r.card, r.lang, r.confidence);
+    view.showCard(r.card, r.lang, r.confidence, r.needs_review);
     showAlternatives();
     const low = r.needs_review;
     view.setResultState(low ? "warn" : "ok");
