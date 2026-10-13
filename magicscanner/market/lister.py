@@ -190,7 +190,7 @@ def _list_item(con: sqlite3.Connection, page: Page, item: Listing, submit: bool,
             browser.goto(page, url)
         message = put_for_sale(page, item, amount, submit)
         if submit:
-            inventory.mark_listed(con, item.inventory_id, amount)
+            inventory.mark_listed(con, item.inventory_id, amount, url)
         item.remaining -= amount
         published += amount
         log.info("✓ %s x%d -> %s %s", item.label, amount, url, message)

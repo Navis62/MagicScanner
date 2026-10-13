@@ -101,6 +101,20 @@ CREATE TABLE IF NOT EXISTS inventory (
     UNIQUE (card_id, lang, condition, price)
 );
 
+-- Journal des mises en vente : une ligne par publication, avec le prix auquel elle a été faite.
+-- Jamais modifié : il garde l'historique même si les prix du stock changent plus tard.
+CREATE TABLE IF NOT EXISTS listings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    inventory_id INTEGER NOT NULL REFERENCES inventory(id),
+    card_id TEXT NOT NULL REFERENCES cards(id),
+    lang TEXT NOT NULL,
+    condition TEXT NOT NULL,
+    price REAL NOT NULL,
+    amount INTEGER NOT NULL,
+    url TEXT,
+    listed_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS scans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     inventory_id INTEGER REFERENCES inventory(id),
@@ -123,5 +137,20 @@ def connect(path: Path | str = DB_PATH) -> sqlite3.Connection:
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA foreign_keys=ON")
     con.executescript(SCHEMA)
+    backfill_listings(con)
     con.commit()
     return con
+
+
+def backfill_listings(con: sqlite3.Connection) -> None:
+    """Rattrape les publications faites avant l'existence du journal : pour chaque ligne dont le nombre publié
+    dépasse celui du journal, ajoute la différence au prix de la ligne. Sans effet quand tout est à jour."""
+    con.execute(
+        """INSERT INTO listings (inventory_id, card_id, lang, condition, price, amount, url, listed_at)
+           SELECT i.id, i.card_id, i.lang, i.condition, i.price,
+                  i.listed_quantity - COALESCE((SELECT SUM(l.amount) FROM listings l WHERE l.inventory_id = i.id), 0),
+                  (SELECT u.url FROM cm_urls u JOIN cards c ON c.cardmarket_id = u.id_product WHERE c.id = i.card_id),
+                  i.updated_at
+           FROM inventory i
+           WHERE i.listed_quantity > COALESCE((SELECT SUM(l.amount) FROM listings l WHERE l.inventory_id = i.id), 0)"""
+    )

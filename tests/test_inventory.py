@@ -1,6 +1,6 @@
 import pytest
 
-from magicscanner import inventory
+from magicscanner import db, inventory
 
 
 def test_same_card_increments_quantity(con):
@@ -71,3 +71,29 @@ def test_can_undo_the_unpublished_copy(con):
     second = inventory.add_scan(con, "grave-dka", "fr", 0.9, "")
     assert inventory.undo_scan(con, second)
     assert inventory.quantity(con, "grave-dka", "fr") == (1, 1)
+
+
+def test_journal_records_the_price_of_each_publication(con):
+    inventory.add_scan(con, "grave-dka", "fr", 0.9, "")
+    inventory.mark_listed(con, _line(con), 1, "https://example/Gravecrawler")
+    (entry,) = inventory.listings(con)
+    assert (entry["price"], entry["amount"], entry["lang"], entry["condition"]) == (0.20, 1, "fr", "NM")
+    assert entry["url"] == "https://example/Gravecrawler" and entry["listed_at"]
+
+
+def test_journal_keeps_the_original_price_when_the_stock_price_changes(con):
+    inventory.add_scan(con, "grave-dka", "fr", 0.9, "")
+    inventory.mark_listed(con, _line(con), 1)
+    con.execute("UPDATE inventory SET price = 0.50")   # repricing ultérieur
+    con.commit()
+    assert [e["price"] for e in inventory.listings(con)] == [0.20]
+
+
+def test_backfill_catches_up_publications_made_before_the_journal(con):
+    inventory.add_scan(con, "grave-dka", "fr", 0.9, "")
+    con.execute("UPDATE inventory SET listed_quantity = 1")   # publié avant l'existence du journal
+    con.commit()
+    db.backfill_listings(con)
+    db.backfill_listings(con)   # idempotent
+    (entry,) = inventory.listings(con)
+    assert (entry["price"], entry["amount"]) == (0.20, 1)

@@ -88,13 +88,28 @@ def recent_scans(con: sqlite3.Connection, limit: int) -> list[sqlite3.Row]:
     return con.execute("SELECT * FROM scans WHERE undone=0 ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
 
 
-def mark_listed(con: sqlite3.Connection, line_id: int, amount: int) -> None:
+def mark_listed(con: sqlite3.Connection, line_id: int, amount: int, url: str | None = None) -> None:
+    """Enregistre une mise en vente : avance le compteur de la ligne et l'inscrit au journal avec son prix."""
     con.execute(
         """UPDATE inventory SET listed_quantity = listed_quantity + ?, list_error = NULL,
            updated_at = CURRENT_TIMESTAMP WHERE id=?""",
         (amount, line_id),
     )
+    con.execute(
+        """INSERT INTO listings (inventory_id, card_id, lang, condition, price, amount, url)
+           SELECT id, card_id, lang, condition, price, ?, ? FROM inventory WHERE id=?""",
+        (amount, url, line_id),
+    )
     con.commit()
+
+
+def listings(con: sqlite3.Connection, limit: int = 50) -> list[sqlite3.Row]:
+    """Dernières mises en vente (carte, langue, état, prix auquel elle a été faite, quantité, date)."""
+    return con.execute(
+        """SELECT l.*, datetime(l.listed_at, 'localtime') AS listed_local, c.name, c.set_code, c.collector_number FROM listings l JOIN cards c ON c.id = l.card_id
+           ORDER BY l.id DESC LIMIT ?""",
+        (limit,),
+    ).fetchall()
 
 
 def mark_list_error(con: sqlite3.Connection, line_id: int, message: str) -> None:

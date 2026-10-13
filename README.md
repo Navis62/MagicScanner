@@ -60,6 +60,11 @@ pas encore, après confirmation. « Tester avec 1 » n'en publie qu'une, pour un
 carte déjà publiée n'annonce que ce 2e exemplaire (l'écran de scan indique « dont 1 déjà en vente — 1 à publier »).
 Un exemplaire déjà publié ne peut plus être annulé ni corrigé depuis l'outil : il faut retirer l'annonce sur Cardmarket.
 
+**Journal des prix** : chaque publication est inscrite dans la table `listings` (carte, langue, état, **prix auquel elle a
+été faite**, quantité, URL, date) et n'est jamais modifiée. Aujourd'hui tout part à 0,20 € (`MS_PRICE`), mais le stock est
+déjà organisé par prix : une carte scannée à un autre prix forme sa propre ligne, et l'historique garde le prix d'origine
+de chaque annonce même si on réétiquette le stock plus tard.
+
 **Sécurité** : une annonce n'est comptée comme publiée qu'après le bandeau de confirmation vert de Cardmarket. Si le
 site ne confirme ni n'affiche d'erreur, tout s'arrête (capture dans `data/publish-debug/`) plutôt que de risquer des
 doublons. Si tu n'es pas connecté à Cardmarket, rien n'est tenté.
@@ -71,6 +76,7 @@ magicscanner list                        # dry-run : ouvre chaque page, remplit,
 magicscanner list --submit --confirm --limit 5   # premiers essais : confirmation carte par carte
 magicscanner list --submit               # tout le reste
 magicscanner status
+magicscanner history                          # journal des mises en vente, avec le prix de chacune
 magicscanner export inventaire.csv
 ```
 

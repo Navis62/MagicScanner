@@ -46,6 +46,14 @@ def cmd_status(con, args) -> None:
         print(f"  erreur de listing : {r['list_error']} ({r['n']})")
 
 
+def cmd_history(con, args) -> None:
+    rows = inventory.listings(con, args.limit)
+    for r in reversed(rows):
+        print(f"{r['listed_local']}  {r['name']} [{r['set_code'].upper()} #{r['collector_number']}] "
+              f"{r['lang'].upper()} {r['condition']}  x{r['amount']} à {r['price']:.2f} €")
+    print(f"{len(rows)} mises en vente affichées")
+
+
 def cmd_export(con, args) -> None:
     from .market import urls
     rows = inventory.export_rows(con)
@@ -83,6 +91,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_list)
 
     sub.add_parser("status", help="résumé de l'inventaire").set_defaults(func=cmd_status)
+
+    p = sub.add_parser("history", help="journal des mises en vente (carte, prix, quantité, date)")
+    p.add_argument("--limit", type=int, default=50)
+    p.set_defaults(func=cmd_history)
 
     p = sub.add_parser("export", help="exporte l'inventaire en CSV")
     p.add_argument("path", nargs="?", default="inventaire.csv")
