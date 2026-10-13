@@ -20,10 +20,11 @@ Une impression = la fiche anglaise Scryfall (qui porte le `cardmarket_id`). L'in
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python -m pip install -r requirements.txt
-.\.venv\Scripts\python -m magicscanner import            # ~400 Mo Scryfall + catalogue Cardmarket (quelques minutes)
-.\.venv\Scripts\python -m magicscanner login             # ouvre Chrome (profil data/chrome-profile) : se connecter à Cardmarket
-.\.venv\Scripts\python -m magicscanner sync-expansions   # slugs officiels des extensions
+.\.venv\Scriptsctivate
+pip install -e ".[dev]"
+magicscanner import            # ~400 Mo Scryfall + catalogue Cardmarket (quelques minutes)
+magicscanner login             # ouvre Chrome (profil data/chrome-profile) : se connecter à Cardmarket
+magicscanner sync-expansions   # slugs officiels des extensions
 ```
 
 Relancer `import` de temps en temps pour rafraîchir les prix et les nouvelles éditions
@@ -32,7 +33,7 @@ Relancer `import` de temps en temps pour rafraîchir les prix et les nouvelles �
 ## Scanner
 
 ```powershell
-.\.venv\Scripts\python -m magicscanner serve
+magicscanner serve
 ```
 
 Ouvre http://127.0.0.1:8765. Choisir la webcam (la caméra virtuelle Elgato est écartée par défaut).
@@ -51,11 +52,11 @@ si la carte vaut plus de 1 € (`MS_PRICE_ALERT`).
 ## Mettre en vente
 
 ```powershell
-.\.venv\Scripts\python -m magicscanner list                        # dry-run : ouvre chaque page, remplit, ne publie pas
-.\.venv\Scripts\python -m magicscanner list --submit --confirm --limit 5   # premiers essais : confirmation carte par carte
-.\.venv\Scripts\python -m magicscanner list --submit               # tout le reste
-.\.venv\Scripts\python -m magicscanner status
-.\.venv\Scripts\python -m magicscanner export inventaire.csv
+magicscanner list                        # dry-run : ouvre chaque page, remplit, ne publie pas
+magicscanner list --submit --confirm --limit 5   # premiers essais : confirmation carte par carte
+magicscanner list --submit               # tout le reste
+magicscanner status
+magicscanner export inventaire.csv
 ```
 
 L'URL est reconstruite (`/en/Magic/Products/Singles/<Extension>/<Carte>`) puis **vérifiée** : le formulaire de
@@ -63,6 +64,42 @@ vente contient l'idProduct, qui doit être égal au `cardmarket_id` Scryfall. Le
 réguliers (`Akroma-s-Memorial`, `LimDuls-Cohort`, `Plains-V-1`), plusieurs variantes sont essayées, puis une
 recherche dans l'extension ; l'URL validée est mémorisée (table `cm_urls`). Seule la quantité pas encore
 listée est publiée (`listed_quantity`), on peut donc relancer sans doublon.
+
+## Organisation du code
+
+```
+magicscanner/
+  cli.py              commandes (import, login, sync-expansions, serve, list, status, export)
+  config.py           chemins, prix, Chrome, URLs des sources (surcharge MS_*)
+  db.py               schéma SQLite et connexion
+  inventory.py        stock : scans, annulation, correction, progression du listing
+  catalog/            données de référence
+    scryfall.py         import des éditions et des cartes (bulk all_cards, VO + VF)
+    cardmarket.py       import du catalogue et des prix Cardmarket, rattachement éditions -> extensions
+    lookup.py           Catalog : recherche floue des noms, impressions, fiche d'affichage
+  recognition/        image webcam -> impression
+    detect.py           localisation et redressement de la carte
+    ocr.py              RapidOCR + extraction du titre, du numéro, du code d'édition, de la langue
+    visual.py           comparaison avec les images Scryfall (cadre, symbole d'édition)
+    scoring.py          score d'une impression candidate (poids réglables en tête de fichier)
+    recognizer.py       pipeline complet
+  market/             site cardmarket.com
+    urls.py             variantes d'URL produit, URLs validées
+    browser.py          Chrome réel piloté en CDP
+    expansions.py       liste officielle des extensions
+    lister.py           mise en vente
+  web/                interface de scan
+    app.py              API FastAPI
+    static/             index.html, style.css, js/ (main, camera, preview, view, api, sound, dom)
+tests/                pytest ; tests/fixtures contient une vraie photo webcam
+```
+
+## Tests
+
+```powershell
+pytest              # tout
+pytest -m "not integration"   # sans la base importée
+```
 
 ## Configuration (variables d'environnement)
 

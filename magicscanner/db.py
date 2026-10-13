@@ -1,7 +1,6 @@
-"""Accès SQLite. Une seule base : référentiel (Scryfall + Cardmarket) + inventaire."""
+"""Base SQLite unique : référentiel (Scryfall + Cardmarket) et inventaire."""
 import sqlite3
-import threading
-from contextlib import contextmanager
+from pathlib import Path
 
 from .config import DB_PATH
 
@@ -115,31 +114,14 @@ CREATE TABLE IF NOT EXISTS scans (
 );
 """
 
-_lock = threading.RLock()
 
-
-def connect() -> sqlite3.Connection:
-    con = sqlite3.connect(DB_PATH, check_same_thread=False)
+def connect(path: Path | str = DB_PATH) -> sqlite3.Connection:
+    """Ouvre la base (et crée les tables manquantes). Utilisable depuis plusieurs threads :
+    l'appelant sérialise les accès (cf. web.app)."""
+    con = sqlite3.connect(path, check_same_thread=False)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA foreign_keys=ON")
-    return con
-
-
-def init(con: sqlite3.Connection) -> None:
     con.executescript(SCHEMA)
     con.commit()
-
-
-_shared: sqlite3.Connection | None = None
-
-
-@contextmanager
-def shared():
-    """Connexion partagée (serveur web), protégée par un verrou."""
-    global _shared
-    with _lock:
-        if _shared is None:
-            _shared = connect()
-            init(_shared)
-        yield _shared
+    return con

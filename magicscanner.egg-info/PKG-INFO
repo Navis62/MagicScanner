@@ -1,0 +1,17 @@
+Metadata-Version: 2.4
+Name: magicscanner
+Version: 0.1.0
+Summary: Scan webcam de cartes Magic et mise en vente sur Cardmarket
+Requires-Python: >=3.12
+Requires-Dist: fastapi>=0.115
+Requires-Dist: uvicorn[standard]>=0.30
+Requires-Dist: python-multipart>=0.0.9
+Requires-Dist: opencv-python>=4.10
+Requires-Dist: numpy>=2.0
+Requires-Dist: rapidocr>=3.0
+Requires-Dist: onnxruntime>=1.20
+Requires-Dist: rapidfuzz>=3.9
+Requires-Dist: httpx>=0.27
+Requires-Dist: playwright>=1.48
+Provides-Extra: dev
+Requires-Dist: pytest>=8; extra == "dev"
