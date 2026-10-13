@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from . import db, inventory
 from .config import ROOT, SCANS_DIR
+from .recognition import detect
 from .recognition.recognizer import Recognizer
 
 STATIC = ROOT / "magicscanner" / "static"
@@ -69,6 +70,16 @@ async def scan(image: UploadFile = File(...)):
         out["alternatives"] = [{**inventory.card_info(con, c["card_id"]), **c} for c in rec.candidates[1:12]]
         out["stats"] = inventory.stats(con)
         return out
+
+
+@app.post("/api/detect")
+async def detect_only(image: UploadFile = File(...)):
+    """Localise la carte sans la reconnaître ni l'ajouter (cadrage de l'aperçu)."""
+    frame = cv2.imdecode(np.frombuffer(await image.read(), np.uint8), cv2.IMREAD_COLOR)
+    if frame is None:
+        raise HTTPException(400, "image invalide")
+    corners = detect.find_card(frame)
+    return {"corners": corners.tolist() if corners is not None else None}
 
 
 class Reassign(BaseModel):

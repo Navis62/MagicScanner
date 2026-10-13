@@ -20,9 +20,15 @@
 
 <main>
   <section class="cam">
-    <div class="video-wrap">
+    <div class="video-wrap" id="viewport" title="Molette : zoom — clic : centrer ici">
       <video id="video" autoplay playsinline muted></video>
       <div id="status" class="status">Prêt — pose une carte et appuie sur <kbd>Espace</kbd></div>
+    </div>
+    <div class="zoom">
+      <label>Zoom <input type="range" id="zoom" min="1" max="5" step="0.1" value="1"></label>
+      <span id="zoom-val">1.0×</span>
+      <button id="zoom-card" title="Centrer et zoomer sur la dernière carte détectée">Cadrer sur la carte</button>
+      <button id="zoom-reset">Vue entière</button>
     </div>
     <div class="warped-wrap">
       <img id="warped" alt="">

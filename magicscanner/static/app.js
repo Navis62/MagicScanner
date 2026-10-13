@@ -29,6 +29,59 @@ async function startCamera(deviceId) {
 }
 $("camera").addEventListener("change", (e) => startCamera(e.target.value));
 
+// ---------- Zoom de l'aperçu (affichage uniquement, la capture reste en pleine résolution) ----------
+const viewport = $("viewport");
+let view = { z: 1, cx: 0.5, cy: 0.5 };   // zoom + centre (fractions de l'image)
+let lastCorners = null;
+try { view = { ...view, ...JSON.parse(localStorage.getItem("ms-view") || "{}") }; } catch {}
+
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const offset = (c, z) => clamp(0.5 / z - c, 1 / z - 1, 0);
+
+function applyView(save = true) {
+  view.z = clamp(view.z, 1, 5);
+  video.style.transform = `scale(${view.z}) translate(${offset(view.cx, view.z) * 100}%, ${offset(view.cy, view.z) * 100}%)`;
+  $("zoom").value = view.z;
+  $("zoom-val").textContent = view.z.toFixed(1) + "×";
+  if (save) try { localStorage.setItem("ms-view", JSON.stringify(view)); } catch {}
+}
+
+function frameOnCard(corners) {
+  if (!corners || !video.videoWidth) return;
+  const W = video.videoWidth, H = video.videoHeight;
+  const xs = corners.map((p) => p[0] / W), ys = corners.map((p) => p[1] / H);
+  const bw = Math.max(...xs) - Math.min(...xs), bh = Math.max(...ys) - Math.min(...ys);
+  view.cx = (Math.max(...xs) + Math.min(...xs)) / 2;
+  view.cy = (Math.max(...ys) + Math.min(...ys)) / 2;
+  view.z = Math.min(0.8 / bw, 0.8 / bh);   // la carte occupe ~80 % de l'aperçu, avec un peu de marge
+  applyView();
+}
+
+video.addEventListener("loadedmetadata", () => {
+  viewport.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
+  applyView(false);
+});
+viewport.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  view.z *= e.deltaY < 0 ? 1.1 : 1 / 1.1;
+  applyView();
+}, { passive: false });
+viewport.addEventListener("click", (e) => {
+  const r = viewport.getBoundingClientRect();
+  view.cx = (e.clientX - r.left) / r.width / view.z - offset(view.cx, view.z);
+  view.cy = (e.clientY - r.top) / r.height / view.z - offset(view.cy, view.z);
+  applyView();
+});
+$("zoom").addEventListener("input", (e) => { view.z = +e.target.value; applyView(); });
+$("zoom-card").addEventListener("click", async () => {
+  const fd = new FormData();
+  fd.append("image", await grabFrame(), "frame.jpg");
+  const r = await (await fetch("/api/detect", { method: "POST", body: fd })).json();
+  if (r.corners) { lastCorners = r.corners; frameOnCard(r.corners); }
+  else setStatus("Carte non détectée pour le cadrage", "err");
+});
+$("zoom-reset").addEventListener("click", () => { view = { z: 1, cx: 0.5, cy: 0.5 }; applyView(); });
+
 function grabFrame() {
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
@@ -114,6 +167,10 @@ async function scan() {
     const r = await (await fetch("/api/scan", { method: "POST", body: fd })).json();
     $("warped").src = r.warped || "";
     $("ocr").textContent = (r.ocr || []).join("\n");
+    if (r.corners) {
+      lastCorners = r.corners;
+      if (view.z === 1) frameOnCard(r.corners);   // premier cadrage automatique
+    }
     if (!r.ok) {
       current = null;
       resultClass("err");
@@ -220,7 +277,7 @@ $("btn-undo").addEventListener("click", undo);
 $("lang").addEventListener("click", toggleLang);
 
 document.addEventListener("keydown", (e) => {
-  if (e.target.tagName === "INPUT") {
+  if (e.target.id === "search") {
     if (e.key === "Escape") { e.target.blur(); e.preventDefault(); }
     return;
   }
@@ -234,3 +291,7 @@ document.addEventListener("keydown", (e) => {
 listCameras().catch((e) => setStatus("Caméra indisponible : " + e, "err"));
 fetch("/api/stats").then((r) => r.json()).then(showStats);
 refreshRecent();
+
+// Après un clic, on rend le focus à la page pour que Espace scanne toujours (et ne re-clique pas le bouton).
+document.addEventListener("click", (e) => { const b = e.target.closest("button, select"); if (b && b.tagName === "BUTTON") b.blur(); });
+$("zoom").addEventListener("change", (e) => e.target.blur());
