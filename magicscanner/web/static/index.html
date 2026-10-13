@@ -61,7 +61,7 @@
       <button id="cam-restart" class="ghost" title="Relancer le flux de la webcam">Relancer</button>
     </div>
     <div class="analysis">
-      <h3>Dernière analyse</h3>
+      <h3>Dernière analyse <span id="list-chip" class="chip list" hidden></span></h3>
       <div class="warped-wrap">
         <img id="warped" alt="">
         <div class="ocr" id="ocr">Le texte lu sur la carte apparaîtra ici.</div>
@@ -88,11 +88,13 @@
       <div class="badges">
         <button id="lang" class="badge lang" title="Basculer VO/VF (L)">—</button>
         <span id="rarity" class="badge"></span>
+        <span id="list-badge" class="badge list" hidden title="Carte « The List » : même carte que l'original, vendue dans une autre extension">The List</span>
         <span id="conf" class="badge conf"></span>
       </div>
       <dl>
         <dt>Édition</dt><dd><img id="set-icon" class="set-icon" alt=""> <span id="set-name">—</span></dd>
         <dt>Numéro</dt><dd id="number">—</dd>
+        <dt>Vendue dans</dt><dd id="cm-exp">—</dd>
         <dt>Prix tendance</dt><dd id="trend">—</dd>
         <dt>En stock</dt><dd id="qty">—</dd>
         <dt>Cardmarket</dt><dd><a id="cm-url" target="_blank" rel="noopener"></a></dd>

@@ -21,9 +21,17 @@ export function showStats(st) {
   $("stat-tolist").classList.toggle("hot", st.to_list > 0);
 }
 
-export function showScanDebug(warped, ocrLines) {
+export function showScanDebug(warped, ocrLines, listSymbol = null) {
   $("warped").src = warped || "";
   $("ocr").textContent = (ocrLines || []).join("\n");
+  // Symbole The List (étincelle en bas à gauche) : on montre ce que la caméra a vu, pour pouvoir le vérifier.
+  const chip = $("list-chip");
+  chip.hidden = listSymbol == null;
+  if (listSymbol != null) {
+    const seen = listSymbol >= 0.7, unsure = listSymbol > 0.45 && !seen;
+    chip.textContent = seen ? "symbole The List vu" : unsure ? "symbole The List douteux" : "pas de symbole The List";
+    chip.className = "chip list " + (seen ? "yes" : unsure ? "maybe" : "no");
+  }
 }
 
 export function showCard(card, lang, confidence = null, needsReview = false) {
@@ -47,6 +55,8 @@ export function showCard(card, lang, confidence = null, needsReview = false) {
   $("set-icon").src = card.set_icon || "";
   $("set-name").textContent = `${card.set_name} (${card.set_code.toUpperCase()}) — ${card.set_date || ""}`;
   $("number").textContent = card.collector_number;
+  $("list-badge").hidden = !card.is_list;
+  $("cm-exp").textContent = card.cm_expansion || "—";
   const trend = $("trend");
   trend.textContent = card.trend != null
     ? `${card.trend.toFixed(2).replace(".", ",")} €${card.price_alert ? "  ⚠ vaut plus que le prix de vente !" : ""}`

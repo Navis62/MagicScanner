@@ -75,6 +75,10 @@ class Catalog:
         if not fr_name:  # pas de fiche VF pour cette édition : nom VF connu via une autre édition
             r = self.con.execute("SELECT name FROM names WHERE oracle_id=? AND lang='fr' LIMIT 1", (c["oracle_id"],)).fetchone()
             fr_name = r["name"] if r else None
+        expansion = self.con.execute(
+            "SELECT e.name FROM cm_products p JOIN cm_expansions e ON e.id_expansion = p.id_expansion WHERE p.id_product = ?",
+            (c["cardmarket_id"],),
+        ).fetchone()
         return {
             "card_id": card_id,
             "name": c["name"],
@@ -87,6 +91,8 @@ class Catalog:
             "rarity": c["rarity"],
             "image": c["fr_image"] if lang == "fr" and c["fr_image"] else c["image_normal"],
             "image_small": c["image_small"],
+            "is_list": c["set_code"] == "plst",
+            "cm_expansion": expansion["name"] if expansion else None,
             "cardmarket_id": c["cardmarket_id"],
             "cardmarket_url": urls.product_url(self.con, card_id),
             "trend": c["trend"],

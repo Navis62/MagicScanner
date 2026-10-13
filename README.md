@@ -86,6 +86,21 @@ réguliers (`Akroma-s-Memorial`, `LimDuls-Cohort`, `Plains-V-1`), plusieurs vari
 recherche dans l'extension ; l'URL validée est mémorisée (table `cm_urls`). Seule la quantité pas encore
 listée est publiée (`listed_quantity`), on peut donc relancer sans doublon.
 
+## Cartes « The List »
+
+Une carte The List est identique à son impression d'origine (même cadre, même numéro, même code d'édition) à un
+détail près : l'**étincelle de Planeswalker** dans la bordure noire, en bas à gauche. Elle se vend dans une autre
+extension Cardmarket (selon la carte : The List, Mystery Booster, Mystery Booster 2…), donc à un autre prix.
+
+Le détecteur ([list_symbol.py](magicscanner/recognition/list_symbol.py)) cherche cette étincelle par reconnaissance de forme
+dans une petite zone fixe. S'il la voit, l'édition « The List » est privilégiée ; sinon, c'est l'impression d'origine.
+L'écran de scan affiche le badge **The List**, l'extension Cardmarket où la carte sera vendue et ce que la caméra a vu
+(« symbole The List vu / douteux / absent »). Sur des images dégradées comme une webcam, 99 % des cartes The List sont
+détectées pour 0 % de fausses alertes. Si une carte est mal classée, `1`–`9` permet de choisir l'autre impression.
+
+Limite : environ 1 carte The List sur 5 n'a pas d'identifiant Cardmarket dans Scryfall ; elle est reconnue mais
+ne peut pas être publiée automatiquement (erreur « pas d'identifiant Cardmarket » dans le rapport).
+
 ## Organisation du code
 
 ```
@@ -102,6 +117,7 @@ magicscanner/
     detect.py           localisation et redressement de la carte
     ocr.py              RapidOCR + extraction du titre, du numéro, du code d'édition, de la langue
     visual.py           comparaison avec les images Scryfall (cadre, symbole d'édition)
+    list_symbol.py      détection de l'étincelle « The List » (gabarit dans assets/)
     scoring.py          score d'une impression candidate (poids réglables en tête de fichier)
     recognizer.py       pipeline complet
   market/             site cardmarket.com

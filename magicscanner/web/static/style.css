@@ -328,3 +328,10 @@ dd { margin: 0; font-size: 15px; min-width: 0; font-variant-numeric: tabular-num
 
 /* Un panneau ne doit jamais élargir la grille (liste d'éditions défilante, adresse Cardmarket longue…). */
 main > .panel { min-width: 0; }
+
+/* ───────── The List ───────── */
+.badge.list { color: #1c1405; background: linear-gradient(180deg, var(--gold-hi), var(--gold)); border-color: #c9962f; }
+.chip.list { margin-left: 8px; letter-spacing: .02em; text-transform: none; font-weight: 600; }
+.chip.list.yes { color: var(--gold-hi); border-color: rgba(233, 185, 73, .55); background: rgba(233, 185, 73, .12); }
+.chip.list.maybe { color: var(--warn); border-color: rgba(245, 165, 36, .45); }
+.chip.list.no { color: var(--faint); }

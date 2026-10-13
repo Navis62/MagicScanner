@@ -35,7 +35,7 @@ const scan = safe(async () => {
   view.setStatus("Analyse…", "busy");
   try {
     const r = await api.scan(await grabFrame());
-    view.showScanDebug(r.warped, r.ocr);
+    view.showScanDebug(r.warped, r.ocr, r.list_symbol);
     if (r.corners && isDefaultZoom()) frameOnCard(r.corners);   // premier cadrage automatique
     if (!r.ok) {
       current = null;

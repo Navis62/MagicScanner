@@ -99,7 +99,7 @@ async def scan(image: UploadFile = File(...)):
         rec = svc.recognizer.recognize(frame, previous_set=svc.previous_set)
         out = {
             "ok": rec.ok, "error": rec.error, "lang": rec.lang, "confidence": rec.confidence,
-            "title": rec.title, "ocr": rec.lines, "corners": rec.corners,
+            "title": rec.title, "ocr": rec.lines, "corners": rec.corners, "list_symbol": rec.list_symbol,
             "warped": _jpeg_data_url(rec.warped) if rec.warped is not None else None,
         }
         if not rec.ok:

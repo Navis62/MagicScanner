@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 
 from ..catalog import Catalog, NameMatch
-from . import detect, ocr
+from . import detect, list_symbol, ocr
 from .scoring import Candidate, Evidence, score_printing
 
 NAME_TIE_MARGIN = 5     # noms gardés en lice s'ils sont à moins de 5 points du meilleur
@@ -24,6 +24,7 @@ class Recognition:
     candidates: list[Candidate] = field(default_factory=list)  # triés, le premier est retenu
     warped: np.ndarray | None = None
     corners: list | None = None
+    list_symbol: float = 0.0   # confiance (0-1) que le symbole The List est présent
 
     @property
     def best(self) -> Candidate | None:
@@ -67,6 +68,7 @@ class Recognizer:
             rec.error = f"Aucune carte ne correspond à « {titles[0]} »" if titles else "Nom illisible"
             return rec
 
+        rec.list_symbol = round(list_symbol.symbol_score(card), 3)
         best_name = matches[0]
         rec.lang = ocr.detect_language(lines) or best_name.lang
         contenders = [m for m in matches if m.score >= best_name.score - NAME_TIE_MARGIN][:MAX_ORACLES]
@@ -76,6 +78,7 @@ class Recognizer:
             name_scores={m.oracle_id: m.score for m in matches},
             fr_sets=self.catalog.fr_sets,
             previous_set=previous_set,
+            list_symbol=list_symbol.evidence(rec.list_symbol),
         )
         printings = self.catalog.printings([m.oracle_id for m in contenders])
         rec.candidates = sorted(self._pool.map(lambda p: score_printing(card, p, evidence), printings),
