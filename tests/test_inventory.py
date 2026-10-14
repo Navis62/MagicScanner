@@ -117,3 +117,56 @@ def test_cannot_withdraw_more_than_was_published(con):
     inventory.add_scan(con, "grave-dka", "fr", 0.9, "")
     with pytest.raises(ValueError):
         inventory.withdraw_listing(con, _line(con), 1)
+
+
+def test_foil_and_regular_copies_are_separate_lines(con):
+    inventory.add_scan(con, "grave-dka", "fr", 0.9, "")
+    foil_scan = inventory.add_scan(con, "grave-dka", "fr", 0.9, "", foil=True)
+    assert inventory.quantity(con, "grave-dka", "fr") == (1, 0)
+    assert inventory.quantity(con, "grave-dka", "fr", foil=True) == (1, 0)
+    assert inventory.reassign_scan(con, foil_scan, "grave-dka", "en")   # la finition suit le scan
+    assert inventory.quantity(con, "grave-dka", "en", foil=True) == (1, 0)
+    assert inventory.reassign_scan(con, foil_scan, "grave-dka", "en", foil=False)
+    assert inventory.quantity(con, "grave-dka", "en") == (1, 0)
+
+
+def test_old_databases_get_the_foil_column_without_losing_stock(tmp_path):
+    path = tmp_path / "old.db"
+    c = db.connect(path)
+    c.execute("INSERT INTO sets (code, name) VALUES ('dka','Dark Ascension')")
+    c.execute("INSERT INTO cards (id, name, front_name, set_code, collector_number) VALUES ('g','G','G','dka','1')")
+    inventory.add_scan(c, "g", "fr", 0.9, "")
+    c.execute("PRAGMA foreign_keys=OFF")   # simule une ancienne base : table recréée sans la colonne
+    c.executescript("""
+        CREATE TABLE inv_old AS SELECT id, card_id, lang, condition, price, quantity, listed_quantity, exported_quantity,
+                                       list_error, created_at, updated_at FROM inventory;
+        DROP TABLE inventory;
+        ALTER TABLE inv_old RENAME TO inventory;
+        CREATE UNIQUE INDEX old_key ON inventory(card_id, lang, condition, price);
+        ALTER TABLE listings DROP COLUMN foil;""")
+    c.close()
+    c = db.connect(path)
+    assert inventory.quantity(c, "g", "fr") == (1, 0)
+    assert inventory.quantity(c, "g", "fr", foil=True) == (0, 0)
+    assert c.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_different_prices_are_separate_lines_and_follow_the_scan(con):
+    cheap = inventory.add_scan(con, "grave-dka", "fr", 0.9, "")
+    inventory.add_scan(con, "grave-dka", "fr", 0.9, "", price=1.5)
+    assert inventory.quantity(con, "grave-dka", "fr") == (1, 0)
+    assert inventory.quantity(con, "grave-dka", "fr", price=1.5) == (1, 0)
+    assert inventory.reassign_scan(con, cheap, "grave-dka", "fr", price=1.5)
+    assert inventory.quantity(con, "grave-dka", "fr", price=1.5) == (2, 0)
+    assert inventory.stats(con)["value"] == pytest.approx(3.0)
+
+
+def test_mark_all_listed_clears_the_to_publish_counter(con):
+    inventory.add_scan(con, "grave-dka", "fr", 0.9, "")
+    inventory.add_scan(con, "grave-dka", "fr", 0.9, "")
+    inventory.add_scan(con, "plains-1", "en", 0.9, "", foil=True)
+    assert inventory.mark_all_listed(con) == 3
+    st = inventory.stats(con)
+    assert (st["to_list"], st["listed"]) == (0, 3)
+    assert sum(e["amount"] for e in inventory.listings(con)) == 3
+    assert inventory.mark_all_listed(con) == 0

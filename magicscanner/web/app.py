@@ -8,15 +8,24 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import cv2
+import httpx
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from .. import db, inventory
-from ..catalog import Catalog
-from ..config import KEEP_SCANS, LOW_CONFIDENCE, SCANS_DIR, ensure_dirs
+from .. import db, inventory, powertools
+from ..catalog import Catalog, cardmarket
+from ..config import (
+    DEFAULT_PRICE,
+    KEEP_SCANS,
+    LOW_CONFIDENCE,
+    MIN_PRICE,
+    PRICE_ALERT_MARGIN,
+    SCANS_DIR,
+    ensure_dirs,
+)
 from ..recognition import Candidate, Recognizer, detect
 from .publisher import PublishJob
 
@@ -55,6 +64,8 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 class CardChoice(BaseModel):
     card_id: str
     lang: str
+    foil: bool | None = None   # None : finition inchangée (correction) ou non-foil (ajout manuel)
+    price: float | None = Field(None, ge=MIN_PRICE)   # None : prix inchangé (correction) ou prix par défaut
 
 
 class PublishRequest(BaseModel):
@@ -64,10 +75,13 @@ class PublishRequest(BaseModel):
 
 # --- Helpers ------------------------------------------------------------------------------------------------
 
-def _card(card_id: str, lang: str | None = None, candidate: Candidate | None = None) -> dict:
+def _card(card_id: str, lang: str | None = None, candidate: Candidate | None = None, foil: bool = False,
+          price: float = DEFAULT_PRICE) -> dict:
     """Fiche pour l'UI : référentiel + stock (quantité, dont déjà publiées) (+ détail du score si candidate)."""
-    info = svc.catalog.card_info(card_id, lang)
-    info["quantity"], info["listed"] = inventory.quantity(svc.con, card_id, lang) if lang else (0, 0)
+    info = svc.catalog.card_info(card_id, lang, foil)
+    info["foil"], info["price"] = foil, price
+    info["price_alert"] = bool(info["trend"] and info["trend"] > price + PRICE_ALERT_MARGIN)
+    info["quantity"], info["listed"] = inventory.quantity(svc.con, card_id, lang, foil, price) if lang else (0, 0)
     if candidate:
         info.update(asdict(candidate))
     return info
@@ -113,11 +127,12 @@ def index():
 
 
 @app.post("/api/scan")
-async def scan(image: UploadFile = File(...)):
+async def scan(image: UploadFile = File(...), foil: bool = Form(False),
+               price: float = Form(DEFAULT_PRICE, ge=MIN_PRICE)):
     """Reconnaît la carte et l'ajoute immédiatement au stock (annulable)."""
     frame = await _decode(image)
     with svc.lock:
-        rec = svc.recognizer.recognize(frame, previous_set=svc.previous_set)
+        rec = svc.recognizer.recognize(frame, previous_set=svc.previous_set, foil=foil)
         out = {
             "ok": rec.ok, "error": rec.error, "lang": rec.lang, "confidence": rec.confidence,
             "title": rec.title, "ocr": rec.lines, "corners": rec.corners, "list_symbol": rec.list_symbol,
@@ -127,10 +142,11 @@ async def scan(image: UploadFile = File(...)):
             _keep_failed_frame(frame)
             return out
         best = rec.best
-        scan_id = inventory.add_scan(svc.con, best.card_id, rec.lang, rec.confidence, " | ".join(rec.lines))
+        scan_id = inventory.add_scan(svc.con, best.card_id, rec.lang, rec.confidence, " | ".join(rec.lines),
+                                     foil, price)
         if KEEP_SCANS == "all" or (KEEP_SCANS == "low" and rec.confidence < LOW_CONFIDENCE):
             cv2.imwrite(str(SCANS_DIR / f"{scan_id}.jpg"), rec.warped, [cv2.IMWRITE_JPEG_QUALITY, 70])
-        card = _card(best.card_id, rec.lang, best)
+        card = _card(best.card_id, rec.lang, best, foil, price)
         svc.previous_set = card["set_code"]
         return out | {
             "scan_id": scan_id,
@@ -153,32 +169,39 @@ async def detect_card(image: UploadFile = File(...)):
 def add_manual(body: CardChoice):
     """Ajout manuel (après une recherche, quand la reconnaissance a échoué)."""
     with svc.lock:
-        scan_id = inventory.add_scan(svc.con, body.card_id, body.lang, 1.0, "manuel")
-        return {"ok": True, "scan_id": scan_id, "card": _card(body.card_id, body.lang), "stats": inventory.stats(svc.con)}
+        foil, price = bool(body.foil), body.price or DEFAULT_PRICE
+        scan_id = inventory.add_scan(svc.con, body.card_id, body.lang, 1.0, "manuel", foil, price)
+        card = _card(body.card_id, body.lang, foil=foil, price=price)
+        return {"ok": True, "scan_id": scan_id, "card": card, "stats": inventory.stats(svc.con)}
 
 
-@app.post("/api/scans/{scan_id}/undo")
-def undo(scan_id: int):
+@app.post("/api/undo")
+def undo_last():
+    """Annule le dernier scan encore actif : appelé plusieurs fois, remonte scan après scan."""
     with svc.lock:
+        last = inventory.recent_scans(svc.con, 1)
+        if not last:
+            raise HTTPException(404, "Aucun scan à annuler")
+        scan = last[0]
         try:
-            undone = inventory.undo_scan(svc.con, scan_id)
+            inventory.undo_scan(svc.con, scan["id"])
         except inventory.AlreadyListed as e:
             raise HTTPException(409, str(e)) from None
-        if not undone:
-            raise HTTPException(404, "scan introuvable ou déjà annulé")
-        return {"ok": True, "stats": inventory.stats(svc.con)}
+        card = _card(scan["card_id"], scan["lang"], foil=bool(scan["foil"]), price=scan["price"])
+        return {"ok": True, "card": card, "lang": scan["lang"], "stats": inventory.stats(svc.con)}
 
 
 @app.post("/api/scans/{scan_id}/reassign")
 def reassign(scan_id: int, body: CardChoice):
     with svc.lock:
         try:
-            moved = inventory.reassign_scan(svc.con, scan_id, body.card_id, body.lang)
+            moved = inventory.reassign_scan(svc.con, scan_id, body.card_id, body.lang, body.foil, body.price)
         except inventory.AlreadyListed as e:
             raise HTTPException(409, str(e)) from None
         if not moved:
             raise HTTPException(404, "scan introuvable ou annulé")
-        card = _card(body.card_id, body.lang)
+        line = inventory.scan_line(svc.con, scan_id)
+        card = _card(body.card_id, body.lang, foil=bool(line["foil"]), price=line["price"])
         svc.previous_set = card["set_code"]
         return {"ok": True, "card": card, "stats": inventory.stats(svc.con)}
 
@@ -200,8 +223,37 @@ def stats():
 @app.get("/api/recent")
 def recent(limit: int = 30):
     with svc.lock:
-        return [{"scan_id": s["id"], "lang": s["lang"], **_card(s["card_id"], s["lang"])}
+        return [{"scan_id": s["id"], "lang": s["lang"], **_card(s["card_id"], s["lang"], foil=bool(s["foil"]), price=s["price"])}
                 for s in inventory.recent_scans(svc.con, limit)]
+
+
+# --- Prix tendance --------------------------------------------------------------------------------------------
+
+@app.post("/api/prices/refresh")
+def refresh_prices():
+    """Retélécharge le guide des prix Cardmarket (prix tendance, y compris foil)."""
+    try:
+        with svc.lock:
+            created = cardmarket.import_prices(svc.con)
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"Téléchargement impossible : {e}") from None
+    return {"created_at": created}
+
+
+# --- Export TCG Powertools -----------------------------------------------------------------------------------
+
+@app.get("/api/export")
+def export_powertools(everything: bool = False):
+    """CSV d'import TCG Powertools des cartes pas encore exportées (tout le stock avec `everything`)."""
+    with svc.lock:
+        content, lines, skipped = powertools.build(svc.con, everything)
+    if not lines:
+        raise HTTPException(400, "Rien à exporter : toutes les cartes ont déjà été exportées.")
+    return Response(content, media_type="text/csv; charset=utf-8", headers={
+        "Content-Disposition": 'attachment; filename="powertools-import.csv"',
+        "X-Export-Lines": str(lines), "X-Export-Skipped": str(skipped),
+        "Access-Control-Expose-Headers": "X-Export-Lines, X-Export-Skipped",
+    })
 
 
 # --- Publication Cardmarket ----------------------------------------------------------------------------------
@@ -221,6 +273,16 @@ def publish(body: PublishRequest | None = None):
     if not publisher.start(submit=not body.dry_run, limit=body.limit):
         raise HTTPException(409, "Une publication est déjà en cours.")
     return publisher.snapshot()
+
+
+@app.post("/api/publish/reset")
+def publish_reset():
+    """Remet le compteur « à publier » à zéro : tout le stock est considéré comme déjà en vente."""
+    if publisher.snapshot()["state"] == "running":
+        raise HTTPException(409, "Une publication est en cours.")
+    with svc.lock:
+        marked = inventory.mark_all_listed(svc.con)
+        return {"marked": marked, "stats": inventory.stats(svc.con)}
 
 
 @app.post("/api/publish/stop")

@@ -19,8 +19,9 @@ CHROME_PROFILE = DATA / "chrome-profile"
 # --- Vente (POC : tout est NM, prix fixe) ---------------------------------------------------------------------
 DEFAULT_PRICE = float(os.environ.get("MS_PRICE", "0.20"))
 DEFAULT_CONDITION = "NM"
+MIN_PRICE = 0.02   # prix minimum accepté par Cardmarket
+PRICE_ALERT_MARGIN = float(os.environ.get("MS_ALERT_MARGIN", "0.50"))  # alarme si tendance > prix de vente + cette marge
 LANGS = ("en", "fr")
-PRICE_ALERT = float(os.environ.get("MS_PRICE_ALERT", "1.00"))  # tendance au-delà de laquelle l'UI alerte
 
 # --- Chrome piloté (Cardmarket) -------------------------------------------------------------------------------
 CHROME_EXE = os.environ.get("MS_CHROME", r"C:\Program Files\Google\Chrome\Application\chrome.exe")

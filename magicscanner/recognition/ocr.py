@@ -24,6 +24,15 @@ class OcrLine:
 
 
 @dataclass(frozen=True)
+class PixelLine:
+    """Ligne lue dans l'image entière (coordonnées en pixels : coin haut-gauche et hauteur)."""
+    text: str
+    x: float
+    y: float
+    height: float
+
+
+@dataclass(frozen=True)
 class CollectorInfo:
     number: str | None = None   # « 87 » (sans zéros de tête)
     total: str | None = None    # « 356 » (taille de l'édition, anciens cadres)
@@ -39,7 +48,32 @@ class OcrEngine:
         if res.txts is None:
             return []
         return [OcrLine(t, float(s), float(b[0][0]) / CARD_W, float(b[0][1]) / CARD_H)
-                for b, t, s in zip(res.boxes, res.txts, res.scores)]
+                for b, t, s in zip(res.boxes, res.txts, res.scores, strict=True)]
+
+    def read_pixels(self, frame: np.ndarray) -> list[PixelLine]:
+        """Lit une image entière (la carte n'y est pas encore localisée) : positions en pixels."""
+        res = self._engine(frame)
+        if res.txts is None:
+            return []
+        return [PixelLine(t, float(b[:, 0].min()), float(b[:, 1].min()), float(b[:, 1].max() - b[:, 1].min()))
+                for b, t in zip(res.boxes, res.txts, strict=True)]
+
+
+# Position des repères sur une carte (fractions de sa hauteur) : centre du titre, ligne la plus basse à gauche
+# (code d'édition / langue), et retrait du texte par rapport au bord gauche (fraction de sa largeur).
+TITLE_CENTER, FOOTER_CENTER, TEXT_INSET = 0.060, 0.945, 0.095
+
+
+def card_from_title(title: PixelLine, footer: PixelLine) -> np.ndarray | None:
+    """Coins (haut-gauche, haut-droit, bas-droit, bas-gauche) d'une carte droite, déduits de sa ligne de titre et de la
+    ligne du bas : sert quand le bord noir de la carte se fond dans l'ombre et que la détection des contours échoue."""
+    title_y, footer_y = title.y + title.height / 2, footer.y + footer.height / 2
+    height = (footer_y - title_y) / (FOOTER_CENTER - TITLE_CENTER)
+    if height < 100:
+        return None
+    width = height * 63 / 88
+    left, top = title.x - TEXT_INSET * width, title_y - TITLE_CENTER * height
+    return np.float32([[left, top], [left + width, top], [left + width, top + height], [left, top + height]])
 
 
 def title_candidates(lines: list[OcrLine]) -> list[str]:

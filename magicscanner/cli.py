@@ -56,7 +56,7 @@ def cmd_history(con, args) -> None:
     for r in reversed(rows):
         what = f"x{r['amount']} à {r['price']:.2f} €" if r["amount"] > 0 else f"RETRAIT de {-r['amount']}"
         print(f"{r['listed_local']}  {r['name']} [{r['set_code'].upper()} #{r['collector_number']}] "
-              f"{r['lang'].upper()} {r['condition']}  {what}")
+              f"{r['lang'].upper()} {r['condition']}{' FOIL' if r['foil'] else ''}  {what}")
     print(f"{len(rows)} mises en vente affichées")
 
 
@@ -65,10 +65,10 @@ def cmd_export(con, args) -> None:
     rows = inventory.export_rows(con)
     with open(args.path, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f, delimiter=";")
-        w.writerow(["nom", "edition", "code", "numero", "langue", "etat", "prix", "quantite", "listees", "id_cardmarket", "url"])
+        w.writerow(["nom", "edition", "code", "numero", "langue", "etat", "foil", "prix", "quantite", "listees", "id_cardmarket", "url"])
         for r in rows:
             w.writerow([r["name"], r["set_name"], r["set_code"], r["collector_number"], r["lang"], r["condition"],
-                        r["price"], r["quantity"], r["listed_quantity"], r["cardmarket_id"],
+                        int(r["foil"]), r["price"], r["quantity"], r["listed_quantity"], r["cardmarket_id"],
                         urls.product_url(con, r["card_id"])])
     print(f"{len(rows)} lignes -> {args.path}")
 

@@ -6,14 +6,13 @@ from dataclasses import dataclass
 
 from rapidfuzz import fuzz, process
 
-from ..config import PRICE_ALERT
 from ..market import urls
 
 PRINTING_SQL = """
     SELECT c.*, s.name AS set_name, s.icon_svg, s.released_at AS set_date,
            COALESCE(s.printed_size, s.card_count) AS set_size,
            l.printed_name AS fr_name, l.image_normal AS fr_image,
-           pr.trend
+           pr.trend, pr.trend_foil
     FROM cards c
     JOIN sets s ON s.code = c.set_code
     LEFT JOIN localized l ON l.set_code = c.set_code AND l.collector_number = c.collector_number AND l.lang = 'fr'
@@ -76,7 +75,7 @@ class Catalog:
         rows = sorted(self.printings([m.oracle_id for m in matches]), key=lambda p: p["released_at"] or "", reverse=True)
         return matches[0].lang, [p["id"] for p in rows[:limit]]
 
-    def card_info(self, card_id: str, lang: str | None = None) -> dict:
+    def card_info(self, card_id: str, lang: str | None = None, foil: bool = False) -> dict:
         """Fiche d'affichage d'une impression (image VF si la langue est fr et qu'un scan VF existe)."""
         c = self.con.execute(f"{PRINTING_SQL} WHERE c.id = ?", (card_id,)).fetchone()
         fr_name = c["fr_name"]
@@ -87,6 +86,7 @@ class Catalog:
             "SELECT e.name FROM cm_products p JOIN cm_expansions e ON e.id_expansion = p.id_expansion WHERE p.id_product = ?",
             (c["cardmarket_id"],),
         ).fetchone()
+        trend = c["trend_foil"] if foil else c["trend"]
         return {
             "card_id": card_id,
             "name": c["name"],
@@ -104,6 +104,5 @@ class Catalog:
             "cm_expansion": expansion["name"] if expansion else None,
             "cardmarket_id": c["cardmarket_id"],
             "cardmarket_url": urls.product_url(self.con, card_id),
-            "trend": c["trend"],
-            "price_alert": bool(c["trend"] and c["trend"] >= PRICE_ALERT),
+            "trend": trend,
         }

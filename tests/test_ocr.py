@@ -1,5 +1,6 @@
 import pytest
 
+from magicscanner.recognition import ocr
 from magicscanner.recognition.ocr import (
     CollectorInfo,
     OcrLine,
@@ -47,3 +48,19 @@ def test_recent_frame_numbers_with_the_rarity_before_or_after(text, number):
 @pytest.mark.parametrize("text", ["4/4", "2/2", "Illus. Dave Dorman", "MSH • EN"])
 def test_other_bottom_lines_are_not_taken_for_a_number(text):
     assert collector_info([line(text, 0.95)]).number is None
+
+
+def test_card_position_is_deduced_from_the_title_and_the_footer_lines():
+    """Carte de 480×670 px dont le coin haut-gauche est en (1000, 400) : titre et ligne du bas à leur place."""
+    top, height = 400, 670
+    left = 1000
+    title = ocr.PixelLine("Critique terminale", left + ocr.TEXT_INSET * height * 63 / 88, top + 0.06 * height - 10, 20)
+    footer = ocr.PixelLine("FRA • FR", title.x, top + 0.945 * height - 6, 12)
+    corners = ocr.card_from_title(title, footer)
+    assert corners[0] == pytest.approx([left, top], abs=1)
+    assert corners[2] == pytest.approx([left + height * 63 / 88, top + height], abs=1)
+
+
+def test_title_and_footer_too_close_give_no_card():
+    line = ocr.PixelLine("x", 0, 100, 10)
+    assert ocr.card_from_title(line, ocr.PixelLine("y", 0, 150, 10)) is None

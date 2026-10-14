@@ -30,8 +30,13 @@
 
   <div class="publish">
     <button id="btn-publish" class="primary" disabled>Rien à publier</button>
+    <button id="btn-publish-reset" class="ghost" disabled title="Considère tout le stock comme déjà en vente (publié via TCG Powertools par exemple) : le compteur « À publier » repasse à 0">Déjà publié</button>
     <button id="btn-publish-stop" class="danger" hidden>Arrêter</button>
+    <button id="btn-prices" class="ghost" title="Retélécharge les prix tendance Cardmarket (mis à jour chaque nuit)">Prix tendance ↻</button>
+    <button id="btn-export" class="ghost" disabled title="Télécharge un CSV des cartes pas encore exportées, à importer dans TCG Powertools">Export Powertools</button>
   </div>
+  <label class="foil-toggle" title="Les prochains scans sont des foils (F)"><input type="checkbox" id="foil"> Foil <kbd>F</kbd></label>
+  <label class="price-field" title="Prix de vente des prochains scans (modifie aussi la dernière carte scannée)">Prix <input type="number" id="price" min="0.02" step="0.05" value="0.20"> €</label>
   <select id="camera" title="Caméra"></select>
 </header>
 
@@ -41,6 +46,11 @@
     <button id="report-close" title="Fermer">✕</button>
   </div>
   <div id="report-body"></div>
+</div>
+
+<div class="search">
+  <input id="search" placeholder="Recherche manuelle — nom VO ou VF" autocomplete="off">
+  <kbd>/</kbd>
 </div>
 
 <main>
@@ -58,6 +68,8 @@
       <div class="zoom-actions">
         <button id="zoom-card" class="ghost" title="Centrer et zoomer sur la dernière carte détectée">Cadrer</button>
         <button id="zoom-reset" class="ghost">Vue entière</button>
+        <button id="cam-focus" class="ghost" title="Relancer la mise au point de la webcam">Autofocus</button>
+        <button id="cam-freeze" class="ghost" title="Verrouille la mise au point là où elle est ; recliquer pour rétablir l'autofocus">Figer le focus</button>
         <button id="cam-restart" class="ghost" title="Relancer le flux de la webcam">Relancer</button>
       </div>
     </div>
@@ -89,6 +101,7 @@
       <div class="badges">
         <button id="lang" class="badge lang" title="Basculer VO/VF (L)">—</button>
         <span id="rarity" class="badge"></span>
+        <span id="foil-badge" class="badge foil" hidden>Foil</span>
         <span id="list-badge" class="badge list" hidden title="Carte à l'étincelle (The List / Mystery Booster) : même carte que l'original, vendue dans une autre extension">The List</span>
         <span id="conf" class="badge conf"></span>
       </div>
@@ -96,17 +109,14 @@
         <dt>Édition</dt><dd><img id="set-icon" class="set-icon" alt=""> <span id="set-name">—</span></dd>
         <dt>Numéro</dt><dd id="number">—</dd>
         <dt>Vendue dans</dt><dd id="cm-exp">—</dd>
-        <dt>Prix tendance</dt><dd id="trend">—</dd>
+        <dt id="trend-label">Prix tendance</dt><dd id="trend">—</dd>
+        <dt>Prix de vente</dt><dd id="price-val">—</dd>
         <dt>En stock</dt><dd id="qty">—</dd>
         <dt>Cardmarket</dt><dd><a id="cm-url" target="_blank" rel="noopener"></a></dd>
       </dl>
       <div class="actions">
         <button id="btn-next" class="primary"><kbd>Espace</kbd> Suivante</button>
         <button id="btn-undo" class="danger"><kbd>Échap</kbd> Annuler</button>
-      </div>
-      <div class="search">
-        <input id="search" placeholder="Recherche manuelle — nom VO ou VF" autocomplete="off">
-        <kbd>/</kbd>
       </div>
     </div>
   </section>
@@ -126,6 +136,7 @@
   <span><kbd>Espace</kbd> scanner</span>
   <span><kbd>Échap</kbd> annuler</span>
   <span><kbd>L</kbd> VO / VF</span>
+  <span><kbd>F</kbd> foil</span>
   <span><kbd>1</kbd>–<kbd>9</kbd> corriger l'édition</span>
   <span><kbd>/</kbd> rechercher</span>
 </footer>

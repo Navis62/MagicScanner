@@ -1,8 +1,27 @@
 """Base SQLite unique : référentiel (Scryfall + Cardmarket) et inventaire."""
+import json
 import sqlite3
 from pathlib import Path
 
-from .config import DB_PATH
+from .config import CARDMARKET_DIR, DB_PATH
+
+INVENTORY_TABLE = """
+CREATE TABLE IF NOT EXISTS {name} (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id TEXT NOT NULL REFERENCES cards(id),
+    lang TEXT NOT NULL,
+    condition TEXT NOT NULL DEFAULT 'NM',
+    price REAL NOT NULL,
+    foil INTEGER NOT NULL DEFAULT 0,
+    quantity INTEGER NOT NULL DEFAULT 0,
+    listed_quantity INTEGER NOT NULL DEFAULT 0,
+    exported_quantity INTEGER NOT NULL DEFAULT 0,   -- déjà passés dans un export CSV TCG Powertools
+    list_error TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (card_id, lang, condition, price, foil)
+);
+"""
 
 SCHEMA = """
 -- Impressions papier (fiche anglaise Scryfall = identité d'une impression).
@@ -65,7 +84,7 @@ CREATE INDEX IF NOT EXISTS idx_cmp_exp ON cm_products(id_expansion);
 
 CREATE TABLE IF NOT EXISTS cm_prices (
     id_product INTEGER PRIMARY KEY,
-    trend REAL, avg REAL, low REAL, avg7 REAL, avg30 REAL
+    trend REAL, avg REAL, low REAL, avg7 REAL, avg30 REAL, trend_foil REAL
 );
 
 CREATE TABLE IF NOT EXISTS cm_expansions (
@@ -89,19 +108,7 @@ CREATE TABLE IF NOT EXISTS names (
     PRIMARY KEY (oracle_id, lang, name)
 );
 
-CREATE TABLE IF NOT EXISTS inventory (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    card_id TEXT NOT NULL REFERENCES cards(id),
-    lang TEXT NOT NULL,
-    condition TEXT NOT NULL DEFAULT 'NM',
-    price REAL NOT NULL,
-    quantity INTEGER NOT NULL DEFAULT 0,
-    listed_quantity INTEGER NOT NULL DEFAULT 0,
-    list_error TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (card_id, lang, condition, price)
-);
+{inventory}
 
 -- Journal des mises en vente : une ligne par publication, avec le prix auquel elle a été faite.
 -- Jamais modifié : il garde l'historique même si les prix du stock changent plus tard.
@@ -112,6 +119,7 @@ CREATE TABLE IF NOT EXISTS listings (
     lang TEXT NOT NULL,
     condition TEXT NOT NULL,
     price REAL NOT NULL,
+    foil INTEGER NOT NULL DEFAULT 0,
     amount INTEGER NOT NULL,
     url TEXT,
     listed_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -138,27 +146,69 @@ def connect(path: Path | str = DB_PATH) -> sqlite3.Connection:
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA foreign_keys=ON")
-    con.executescript(SCHEMA)
+    con.executescript(SCHEMA.replace("{inventory}", INVENTORY_TABLE.format(name="inventory")))
     _migrate(con)
     backfill_listings(con)
     con.commit()
     return con
 
 
+def _columns(con: sqlite3.Connection, table: str) -> set[str]:
+    return {r["name"] for r in con.execute(f"PRAGMA table_info({table})")}
+
+
 def _migrate(con: sqlite3.Connection) -> None:
     """Colonnes ajoutées après la création des bases existantes (CREATE TABLE IF NOT EXISTS ne les ajoute pas)."""
-    columns = {r["name"] for r in con.execute("PRAGMA table_info(cards)")}
     for column in ("finishes", "promo_types"):
-        if column not in columns:
+        if column not in _columns(con, "cards"):
             con.execute(f"ALTER TABLE cards ADD COLUMN {column} TEXT")
+    if "exported_quantity" not in _columns(con, "inventory"):
+        con.execute("ALTER TABLE inventory ADD COLUMN exported_quantity INTEGER NOT NULL DEFAULT 0")
+    if "trend_foil" not in _columns(con, "cm_prices"):
+        con.execute("ALTER TABLE cm_prices ADD COLUMN trend_foil REAL")
+        _backfill_trend_foil(con)
+    if "foil" not in _columns(con, "listings"):
+        con.execute("ALTER TABLE listings ADD COLUMN foil INTEGER NOT NULL DEFAULT 0")
+    if "foil" not in _columns(con, "inventory"):
+        _add_foil_to_inventory(con)
+
+
+def _backfill_trend_foil(con: sqlite3.Connection) -> None:
+    """Les prix foil viennent du même fichier que les autres : on relit celui déjà téléchargé (sans effet s'il manque,
+    le prochain `import` les remplira)."""
+    path = CARDMARKET_DIR / "price_guide.json"
+    if not path.exists():
+        return
+    guides = json.loads(path.read_text(encoding="utf-8"))["priceGuides"]
+    con.executemany("UPDATE cm_prices SET trend_foil=? WHERE id_product=?",
+                    [(g.get("trend-foil"), g["idProduct"]) for g in guides])
+
+
+def _add_foil_to_inventory(con: sqlite3.Connection) -> None:
+    """La finition fait partie de l'identité d'une ligne (contrainte UNIQUE) : SQLite ne sait pas la modifier,
+    on reconstruit la table en gardant les identifiants (scans et journal y font référence)."""
+    con.commit()
+    con.execute("PRAGMA foreign_keys=OFF")
+    con.executescript(
+        """BEGIN;
+        """ + INVENTORY_TABLE.format(name="inventory_new") + """
+        INSERT INTO inventory_new (id, card_id, lang, condition, price, quantity, listed_quantity, exported_quantity,
+                               list_error, created_at, updated_at)
+            SELECT id, card_id, lang, condition, price, quantity, listed_quantity, exported_quantity,
+                   list_error, created_at, updated_at FROM inventory;
+        DROP TABLE inventory;
+        ALTER TABLE inventory_new RENAME TO inventory;
+        COMMIT;"""
+    )
+    con.execute("PRAGMA foreign_keys=ON")
 
 
 def backfill_listings(con: sqlite3.Connection) -> None:
     """Rattrape les publications faites avant l'existence du journal : pour chaque ligne dont le nombre publié
     dépasse celui du journal, ajoute la différence au prix de la ligne. Sans effet quand tout est à jour."""
     con.execute(
-        """INSERT INTO listings (inventory_id, card_id, lang, condition, price, amount, url, listed_at)
-           SELECT i.id, i.card_id, i.lang, i.condition, i.price,
+        """INSERT INTO listings (inventory_id, card_id, lang, condition, price, foil, amount, url, listed_at)
+           SELECT i.id, i.card_id, i.lang, i.condition, i.price, i.foil,
                   i.listed_quantity - COALESCE((SELECT SUM(l.amount) FROM listings l WHERE l.inventory_id = i.id), 0),
                   (SELECT u.url FROM cm_urls u JOIN cards c ON c.cardmarket_id = u.id_product WHERE c.id = i.card_id),
                   i.updated_at

@@ -8,6 +8,13 @@ const canvas = $("canvas");
 const STALL_MS = 4000;
 
 let starting = false;
+let frozen = false;   // mise au point verrouillée (mode manuel)
+
+function showFrozen(on) {
+  frozen = on;
+  $("cam-freeze").textContent = on ? "Focus figé ✔" : "Figer le focus";
+  $("cam-freeze").classList.toggle("active", on);
+}
 
 async function videoInputs() {
   return (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
@@ -19,6 +26,7 @@ async function start(deviceId) {
   try {
     video.srcObject?.getTracks().forEach((t) => t.stop());
     video.srcObject = null;
+    showFrozen(false);   // un nouveau flux repart en autofocus
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { deviceId: deviceId ? { exact: deviceId } : undefined, width: { ideal: 1920 }, height: { ideal: 1080 } },
     });
@@ -40,6 +48,45 @@ async function start(deviceId) {
 export function restart(reason) {
   setStatus(`Caméra : ${reason}, relance…`, "busy");
   start(select.value);
+}
+
+/** Relance la mise au point : un autofocus ponctuel si la caméra le permet, sinon on sort du mode continu et on y
+ * revient ; à défaut de réglage de focus, on relance le flux. */
+export async function refocus() {
+  const track = video.srcObject?.getVideoTracks()[0];
+  const modes = track?.getCapabilities?.().focusMode;
+  if (!modes?.length) return restart("pas de réglage de focus, relance du flux");
+  const set = (focusMode) => track.applyConstraints({ advanced: [{ focusMode }] });
+  try {
+    if (modes.includes("single-shot")) await set("single-shot");
+    else if (modes.includes("manual") && modes.includes("continuous")) {
+      await set("manual");
+      await new Promise((r) => setTimeout(r, 300));
+      await set("continuous");
+      showFrozen(false);
+    } else return restart("autofocus non relançable, relance du flux");
+    setStatus("Autofocus relancé", "busy");
+    setTimeout(() => !frozen && modes.includes("continuous") && set("continuous").catch(() => {}), 1500);
+  } catch {
+    restart("autofocus indisponible, relance du flux");
+  }
+}
+
+/** Verrouille la mise au point là où elle est (ou la libère) : utile quand l'autofocus pompe sur la pile de cartes. */
+async function toggleFreeze() {
+  const track = video.srcObject?.getVideoTracks()[0];
+  const caps = track?.getCapabilities?.() ?? {};
+  if (!caps.focusMode?.includes("manual")) return setStatus("Cette caméra ne permet pas de figer le focus", "err");
+  const advanced = frozen
+    ? { focusMode: caps.focusMode.includes("continuous") ? "continuous" : "manual" }
+    : { focusMode: "manual", ...(track.getSettings().focusDistance != null && { focusDistance: track.getSettings().focusDistance }) };
+  try {
+    await track.applyConstraints({ advanced: [advanced] });
+    showFrozen(!frozen);
+    setStatus(frozen ? "Focus figé — Autofocus puis « Figer » pour le recaler" : "Autofocus continu rétabli", "busy");
+  } catch (e) {
+    setStatus("Réglage du focus refusé : " + e.message, "err");
+  }
 }
 
 function watchdog() {
@@ -66,6 +113,8 @@ export async function initCamera() {
   if (pick) select.value = pick.deviceId;
   select.addEventListener("change", () => start(select.value));
   $("cam-restart").addEventListener("click", () => restart("relance manuelle"));
+  $("cam-focus").addEventListener("click", refocus);
+  $("cam-freeze").addEventListener("click", toggleFreeze);
   watchdog();
   await start(select.value);
 }

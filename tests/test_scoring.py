@@ -56,3 +56,10 @@ def test_close_candidates_in_the_same_product_are_not():
 def test_a_clear_winner_is_not_ambiguous():
     assert not recognizer._ambiguous([candidate(1.0, 1), candidate(0.6, 2)])
     assert not recognizer._ambiguous([candidate(1.0, 1)])
+
+
+def test_a_foil_scan_prefers_a_printing_that_exists_in_foil(same_frame_printings):
+    rows, evidence = same_frame_printings
+    scan = np.full((880, 630, 3), 90, np.uint8)
+    foil = Evidence(lang="en", collector=CollectorInfo(), name_scores={"o-speed": 100}, fr_sets=set(), foil=True)
+    assert score_printing(scan, rows["surge"], foil).score == score_printing(scan, rows["normal"], foil).score

@@ -29,7 +29,7 @@ MAX_AMOUNT = 30  # limite du champ quantité Cardmarket
 LANGUAGE_ID = {"en": 1, "fr": 2, "de": 3, "es": 4, "it": 5, "zhs": 6, "ja": 7, "pt": 8, "ru": 9, "ko": 10, "zht": 11}
 CONDITION_ID = {"MT": 1, "NM": 2, "EX": 3, "GD": 4, "LP": 5, "PL": 6, "PO": 7}
 
-JS_FILL = """([sel, values]) => {
+JS_FILL = """([sel, values, foil]) => {
     const f = document.querySelector(sel);
     for (const [name, v] of Object.entries(values)) {
         const el = f.elements[name];
@@ -37,7 +37,12 @@ JS_FILL = """([sel, values]) => {
         el.dispatchEvent(new Event('input', {bubbles: true}));
         el.dispatchEvent(new Event('change', {bubbles: true}));
     }
-    for (const name of ['isFoil', 'isSigned', 'isAltered']) if (f.elements[name]) f.elements[name].checked = false;
+    for (const name of ['isFoil', 'isSigned', 'isAltered']) {
+        const el = f.elements[name];
+        if (!el) continue;
+        el.checked = name === 'isFoil' && foil;
+        el.dispatchEvent(new Event('change', {bubbles: true}));
+    }
 }"""
 
 
@@ -51,6 +56,7 @@ class Listing:
     condition: str
     price: float
     remaining: int
+    foil: bool = False
 
 
 @dataclass
@@ -144,9 +150,9 @@ def put_for_sale(page: Page, item: Listing, amount: int, submit: bool) -> str:
         "price": f"{item.price:.2f}",
     }
     # Le formulaire peut être replié : champs renseignés en JS (mêmes événements qu'une saisie).
-    page.evaluate(JS_FILL, [FORM, values])
+    page.evaluate(JS_FILL, [FORM, values, item.foil])
     if not submit:
-        return f"dry-run {values}"
+        return f"dry-run {values}{' foil' if item.foil else ''}"
     with page.expect_navigation(wait_until="domcontentloaded", timeout=30000):
         page.evaluate("sel => document.querySelector(sel).requestSubmit()", FORM)
     browser.wait_cloudflare(page)
@@ -161,8 +167,9 @@ def pending(con: sqlite3.Connection, limit: int | None = None) -> list[Listing]:
     ).fetchall()
     return [
         Listing(r["id"], r["card_id"], r["cardmarket_id"],
-                f"{r['name']} [{r['set_code'].upper()} #{r['collector_number']}] {r['lang'].upper()}",
-                r["lang"], r["condition"], r["price"], r["quantity"] - r["listed_quantity"])
+                f"{r['name']} [{r['set_code'].upper()} #{r['collector_number']}] {r['lang'].upper()}"
+                f"{' FOIL' if r['foil'] else ''}",
+                r["lang"], r["condition"], r["price"], r["quantity"] - r["listed_quantity"], bool(r["foil"]))
         for r in rows[:limit]
     ]
 

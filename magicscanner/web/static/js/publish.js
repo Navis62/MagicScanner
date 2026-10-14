@@ -1,6 +1,6 @@
-// Publication sur Cardmarket : bouton, progression, rapport de fin.
+// Publication sur Cardmarket : boutons, progression, rapport de fin.
 import { api } from "./api.js";
-import { $, esc } from "./dom.js";
+import { $, esc, plural } from "./dom.js";
 import { setStatus } from "./view.js";
 
 const POLL_MS = 1500;
@@ -8,13 +8,13 @@ let toList = { cards: 0, lines: 0, value: 0 };
 let running = false;
 let onFinished = () => {};
 
-const plural = (n, word) => `${n} ${word}${n > 1 ? "s" : ""}`;
 const euros = (v) => v.toFixed(2).replace(".", ",") + " €";
 
 function renderButtons() {
   const idle = !running;
   $("btn-publish").disabled = !idle || toList.cards === 0;
   $("btn-publish-stop").hidden = idle;
+  $("btn-publish-reset").disabled = !idle || toList.cards === 0;
   if (idle) {
     $("btn-publish").textContent = toList.cards
       ? `Publier ${plural(toList.cards, "carte")} sur Cardmarket`
@@ -77,11 +77,22 @@ async function start() {
   poll();
 }
 
+async function reset() {
+  if (!confirm(`Marquer ${plural(toList.cards, "carte")} comme déjà en vente sur Cardmarket ?
+
+`
+    + "Elles ne seront plus proposées à la publication (à utiliser quand elles ont été publiées via TCG Powertools).")) return;
+  const r = await api.publishReset();
+  setStatus(`${plural(r.marked, "carte")} marquée${r.marked > 1 ? "s" : ""} comme déjà en vente`, "ok");
+  onFinished();
+}
+
 const safe = (fn) => (...args) => fn(...args).catch((e) => setStatus("Publication impossible : " + e.message, "err"));
 
 export function initPublish(finishedCallback) {
   onFinished = finishedCallback;
   $("btn-publish").addEventListener("click", safe(() => start()));
+  $("btn-publish-reset").addEventListener("click", safe(() => reset()));
   $("btn-publish-stop").addEventListener("click", safe(async () => {
     await api.publishStop();
     setStatus("Arrêt demandé : la carte en cours se termine…", "busy");

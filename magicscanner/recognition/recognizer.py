@@ -11,6 +11,7 @@ from .scoring import Candidate, Evidence, score_printing
 
 NAME_TIE_MARGIN = 5     # noms gardés en lice s'ils sont à moins de 5 points du meilleur
 MAX_ORACLES = 3
+TITLE_FOUND = 92        # score minimal d'un nom lu dans l'image entière pour y repérer la carte
 AMBIGUOUS_GAP = 0.15   # deux premières impressions plus proches que ça ET vendues dans des produits différents
 
 
@@ -67,12 +68,30 @@ class Recognizer:
                 return img, lines, titles, matches
         return attempt
 
-    def recognize(self, frame: np.ndarray, previous_set: str | None = None) -> Recognition:
+    def _locate_by_text(self, frame: np.ndarray) -> np.ndarray | None:
+        """Dernier recours : lit toute l'image, repère une ligne qui est un nom de carte (bandeau du titre) et la ligne
+        du bas alignée dessous, et en déduit la position de la carte."""
+        lines = self.ocr.read_pixels(frame)
+        titles = [(m[0].score, -l.y, l) for l in lines
+                  if len(l.text) >= 4 and (m := self.catalog.match_names([l.text])) and m[0].score >= TITLE_FOUND]
+        for _, _, title in sorted(titles, key=lambda t: t[:2], reverse=True):
+            below = [l for l in lines if l.y > title.y + 6 * title.height and abs(l.x - title.x) < 0.15 * (l.y - title.y)]
+            if below:
+                return ocr.card_from_title(title, max(below, key=lambda l: l.y))
+        return None
+
+    def recognize(self, frame: np.ndarray, previous_set: str | None = None, foil: bool = False) -> Recognition:
         card, corners = detect.extract(frame)
+        if card is not None:
+            card, lines, titles, matches = self._read_card(card)
+        if card is None or not matches:
+            # Contour introuvable ou mal choisi (bord noir dans l'ombre) : on retrouve la carte par son texte.
+            located = self._locate_by_text(frame)
+            if located is not None:
+                card, lines, titles, matches = self._read_card(detect.warp(frame, located))
+                corners = located
         if card is None:
             return Recognition(False, "Carte non détectée : vérifie le cadrage / l'éclairage")
-
-        card, lines, titles, matches = self._read_card(card)
         rec = Recognition(False, warped=card, corners=corners.tolist(), lines=[l.text for l in lines],
                           title=titles[0] if titles else None)
         if not matches:
@@ -89,6 +108,7 @@ class Recognizer:
             name_scores={m.oracle_id: m.score for m in matches},
             fr_sets=self.catalog.fr_sets,
             previous_set=previous_set,
+            foil=foil,
             list_symbol=list_symbol.evidence(rec.list_symbol),
         )
         printings = self.catalog.printings([m.oracle_id for m in contenders])

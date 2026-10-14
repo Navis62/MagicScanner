@@ -50,6 +50,7 @@ export function showCard(card, lang, confidence = null, needsReview = false) {
   $("lang").textContent = lang === "fr" ? "VF" : "VO";
   $("rarity").textContent = card.rarity || "";
   $("rarity").className = "badge " + (card.rarity || "");
+  $("foil-badge").hidden = !card.foil;
   $("conf").textContent = confidence != null ? `confiance ${Math.round(confidence * 100)} %` : "";
   $("conf").className = "badge conf " + (confidence == null ? "" : needsReview ? "mid" : "high");
   $("set-icon").src = card.set_icon || "";
@@ -58,11 +59,13 @@ export function showCard(card, lang, confidence = null, needsReview = false) {
   $("list-badge").hidden = !card.is_list;
   $("list-badge").textContent = card.list_label || "";
   $("cm-exp").textContent = card.cm_expansion || "—";
+  $("trend-label").textContent = card.foil ? "Tendance foil" : "Prix tendance";
   const trend = $("trend");
   trend.textContent = card.trend != null
-    ? `${card.trend.toFixed(2).replace(".", ",")} €${card.price_alert ? "  ⚠ vaut plus que le prix de vente !" : ""}`
+    ? `${card.trend.toFixed(2).replace(".", ",")} €${card.price_alert ? "  ⚠ bien plus que le prix de vente !" : ""}`
     : "—";
   trend.className = card.price_alert ? "alert" : "";
+  $("price-val").textContent = card.price != null ? card.price.toFixed(2).replace(".", ",") + " €" : "—";
   const toList = card.quantity - (card.listed || 0);
   $("qty").textContent = card.listed
     ? `${card.quantity} (dont ${card.listed} déjà en vente sur Cardmarket — ${Math.max(toList, 0)} à publier)`
@@ -90,8 +93,9 @@ export function showRecent(rows) {
   $("recent").innerHTML = rows.map((r) => `
     <li>
       <span class="chip ${esc(r.lang)}">${esc(r.lang.toUpperCase())}</span>
-      <b>${esc(r.lang === "fr" && r.fr_name ? r.fr_name : r.name)}</b>
+      <b>${esc(r.lang === "fr" && r.fr_name ? r.fr_name : r.name)}</b>${r.foil ? ' <span class="chip foil">FOIL</span>' : ""}
       <span class="ref">${esc(r.set_code.toUpperCase())} #${esc(r.collector_number)}</span>
+      <span class="ref">${r.price.toFixed(2).replace(".", ",")} €</span>
       <span class="qty">×${r.quantity}</span>
     </li>`).join("");
 }

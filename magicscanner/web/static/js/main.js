@@ -5,6 +5,7 @@ import { $ } from "./dom.js";
 import { frameOnCard, initPreview, isDefaultZoom } from "./preview.js";
 import { initPublish, updateToList } from "./publish.js";
 import { sound } from "./sound.js";
+import { initTools, updateToExport } from "./tools.js";
 import * as view from "./view.js";
 
 // Carte affichée. mode : "scan" (un clic sur une alternative corrige ce scan) ou "add" (un clic ajoute la carte).
@@ -20,6 +21,7 @@ async function refresh(stats) {
   stats ??= await api.stats();
   view.showStats(stats);
   updateToList(stats);
+  updateToExport(stats);
   view.showRecent(await api.recent());
 }
 
@@ -34,7 +36,7 @@ const scan = safe(async () => {
   busy = true;
   view.setStatus("Analyse…", "busy");
   try {
-    const r = await api.scan(await grabFrame());
+    const r = await api.scan(await grabFrame(), foilOn(), price());
     view.showScanDebug(r.warped, r.ocr, r.list_symbol);
     if (r.corners && isDefaultZoom()) frameOnCard(r.corners);   // premier cadrage automatique
     if (!r.ok) {
@@ -51,26 +53,27 @@ const scan = safe(async () => {
     const low = r.needs_review;
     view.setResultState(low ? "warn" : "ok");
     view.setStatus(low ? `Ajoutée — à vérifier (${r.review_reason})` : "Ajoutée ✔ — Espace pour la suivante", low ? "busy" : "ok");
-    low ? sound.check() : sound.ok();
+    r.card.price_alert ? sound.alarm() : low ? sound.check() : sound.ok();
     refresh(r.stats);
   } finally {
     busy = false;
   }
 });
 
+// Chaque appel annule le scan actif le plus récent : on peut remonter plusieurs fois en arrière.
 const undo = safe(async () => {
-  if (!editable()) return;
-  const r = await api.undo(current.scanId);
-  current.undone = true;
+  const r = await api.undo();
+  current = { mode: "scan", scanId: null, card: r.card, lang: r.lang, alternatives: [], undone: true };
+  view.showCard(r.card, r.lang);
   view.setResultState("undone");
-  view.setStatus("Scan annulé — repose la carte et appuie sur Espace", "busy");
+  view.setStatus(`Annulé : ${r.card.name} — encore pour revenir en arrière, Espace pour scanner`, "busy");
   sound.undo();
   refresh(r.stats);
 });
 
-const reassign = safe(async (cardId, lang) => {
+const reassign = safe(async (cardId, lang, foil = null, newPrice = null) => {
   if (!editable()) return;
-  const r = await api.reassign(current.scanId, cardId, lang);
+  const r = await api.reassign(current.scanId, cardId, lang, foil, newPrice);
   if (current.card.card_id !== cardId) {
     // L'ancienne proposition rejoint les alternatives.
     current.alternatives = [current.card, ...current.alternatives.filter((c) => c.card_id !== cardId)];
@@ -80,15 +83,17 @@ const reassign = safe(async (cardId, lang) => {
   view.showCard(r.card, lang);
   view.setResultState("ok");
   view.setStatus("Corrigé ✔", "ok");
+  if (r.card.price_alert) sound.alarm();
   refresh(r.stats);
 });
 
 const addManual = safe(async (cardId, lang) => {
-  const r = await api.addManual(cardId, lang);
+  const r = await api.addManual(cardId, lang, foilOn(), price());
   current = { mode: "scan", scanId: r.scan_id, card: r.card, lang, alternatives: current?.alternatives || [] };
   view.showCard(r.card, lang);
   view.setResultState("ok");
   view.setStatus("Ajoutée manuellement ✔", "ok");
+  if (r.card.price_alert) sound.alarm();
   refresh(r.stats);
 });
 
@@ -97,6 +102,28 @@ function pickAlternative(i) {
   if (!card) return;
   if (current.mode === "add") addManual(card.card_id, current.lang);
   else reassign(card.card_id, current.lang);
+}
+
+const foilOn = () => $("foil").checked;
+
+/** La case s'applique aux prochains scans ; si une carte vient d'être scannée, elle bascule aussi. */
+function setFoil(on) {
+  $("foil").checked = on;
+  if (editable() && !!current.card.foil !== on) reassign(current.card.card_id, current.lang, on);
+}
+
+/** Prix saisi (0,20 € par défaut) ; une saisie invalide revient au dernier prix valable. */
+let lastPrice = 0.2;
+function price() {
+  const v = Math.round(parseFloat($("price").value) * 100) / 100;
+  if (v >= 0.02) lastPrice = v;
+  $("price").value = lastPrice.toFixed(2);
+  return lastPrice;
+}
+
+function onPriceChange() {
+  const p = price();
+  if (editable() && current.card.price !== p) reassign(current.card.card_id, current.lang, null, p);
 }
 
 function toggleLang() {
@@ -114,13 +141,14 @@ const search = safe(async (q) => {
 });
 
 function onKey(e) {
-  if (e.target.id === "search") {
-    if (e.key === "Escape") { e.preventDefault(); e.target.blur(); }
+  if (e.target.id === "search" || e.target.id === "price") {
+    if (e.key === "Escape" || (e.key === "Enter" && e.target.id === "price")) { e.preventDefault(); e.target.blur(); }
     return;
   }
   if (e.code === "Space") { e.preventDefault(); scan(); }
   else if (e.key === "Escape" || e.key === "Backspace") { e.preventDefault(); undo(); }
   else if (e.key.toLowerCase() === "l") toggleLang();
+  else if (e.key.toLowerCase() === "f") setFoil(!foilOn());
   else if (e.key === "/") { e.preventDefault(); $("search").focus(); }
   else if (/^[1-9]$/.test(e.key)) pickAlternative(+e.key - 1);
 }
@@ -129,6 +157,8 @@ function init() {
   $("btn-next").addEventListener("click", scan);
   $("btn-undo").addEventListener("click", undo);
   $("lang").addEventListener("click", toggleLang);
+  $("price").addEventListener("change", onPriceChange);
+  $("foil").addEventListener("change", (e) => { setFoil(e.target.checked); e.target.blur(); });
   $("search").addEventListener("input", (e) => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => search(e.target.value.trim()), 250);
@@ -138,7 +168,9 @@ function init() {
   document.addEventListener("click", (e) => e.target.closest("button")?.blur());
   initPreview();
   initPublish(() => refresh());
+  initTools(() => refresh());
   initCamera().catch((e) => view.setStatus("Caméra indisponible : " + e.message, "err"));
+  api.stats().then((st) => { lastPrice = st.default_price; price(); }).catch(() => {});
   refresh();
 }
 

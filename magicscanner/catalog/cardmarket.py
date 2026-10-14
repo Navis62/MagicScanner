@@ -17,19 +17,30 @@ MULTI_EXPANSION_SETS = {"plst"}
 
 def import_catalog(con: sqlite3.Connection) -> None:
     products = json.loads(download(CM_PRODUCTS_URL, CARDMARKET_DIR / "products_singles.json").read_text(encoding="utf-8"))["products"]
-    guides = json.loads(download(CM_PRICES_URL, CARDMARKET_DIR / "price_guide.json").read_text(encoding="utf-8"))["priceGuides"]
     con.execute("DELETE FROM cm_products")
     con.executemany(
         "INSERT INTO cm_products VALUES (?,?,?,?)",
         [(p["idProduct"], p["name"], p.get("idExpansion"), p.get("idMetacard")) for p in products],
     )
+    con.commit()
+    log.info("%d produits", len(products))
+    import_prices(con)
+
+
+def import_prices(con: sqlite3.Connection) -> str | None:
+    """Télécharge le guide des prix Cardmarket (mis à jour chaque nuit) et remplace les prix en base.
+    Renvoie la date de publication du guide."""
+    guide = json.loads(download(CM_PRICES_URL, CARDMARKET_DIR / "price_guide.json").read_text(encoding="utf-8"))
+    guides = guide["priceGuides"]
     con.execute("DELETE FROM cm_prices")
     con.executemany(
-        "INSERT OR REPLACE INTO cm_prices VALUES (?,?,?,?,?,?)",
-        [(g["idProduct"], g.get("trend"), g.get("avg"), g.get("low"), g.get("avg7"), g.get("avg30")) for g in guides],
+        "INSERT OR REPLACE INTO cm_prices (id_product, trend, avg, low, avg7, avg30, trend_foil) VALUES (?,?,?,?,?,?,?)",
+        [(g["idProduct"], g.get("trend"), g.get("avg"), g.get("low"), g.get("avg7"), g.get("avg30"), g.get("trend-foil"))
+         for g in guides],
     )
     con.commit()
-    log.info("%d produits, %d prix", len(products), len(guides))
+    log.info("%d prix", len(guides))
+    return guide.get("createdAt")
 
 
 def store_expansions(con: sqlite3.Connection, expansions: list[tuple[int | None, str, str, str | None]]) -> None:

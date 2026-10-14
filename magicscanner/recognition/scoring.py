@@ -27,8 +27,8 @@ PROMO_LIKE_SETS = {"sld", "prm", "mb2", "fmb1"}
 # de départ la départage de l'original quand le symbole est douteux (les cartes ordinaires sont bien plus fréquentes).
 LIST_WEIGHT = 0.60
 LIST_PRIOR = -0.05
-# Le POC ne gère que le non-foil (le formulaire de vente décoche toujours « foil ») : une impression foil-only
-# (surge foil, etched…) ne peut pas être la carte posée sous la caméra, même si son image est identique à l'impression normale.
+# Une impression qui n'existe pas dans la finition scannée (foil-only pour une carte non-foil : surge foil, etched… ;
+# non-foil-only pour une carte foil) ne peut pas être la carte posée sous la caméra, même si son image est identique.
 NOT_NONFOIL = -0.30
 
 
@@ -41,6 +41,7 @@ class Evidence:
     fr_sets: frozenset[str] | set[str]
     previous_set: str | None = None
     list_symbol: float = 0.0        # indice signé du symbole The List (cf. list_symbol.evidence)
+    foil: bool = False              # case « foil » cochée au moment du scan
 
 
 @dataclass
@@ -95,7 +96,7 @@ def score_printing(scan: np.ndarray, p: sqlite3.Row, ev: Evidence) -> Candidate:
         score += LIST_WEIGHT * ev.list_symbol + LIST_PRIOR
         if ev.list_symbol > 0.5:
             reasons.append("étincelle The List / Mystery Booster")
-    if p["finishes"] and "nonfoil" not in p["finishes"].split(","):
+    if p["finishes"] and not {"foil", "etched"} & set(p["finishes"].split(",")) if ev.foil             else p["finishes"] and "nonfoil" not in p["finishes"].split(","):
         score += NOT_NONFOIL
     if ev.lang == "fr" and p["set_code"] not in ev.fr_sets:
         score += NOT_PRINTED_IN_FR
