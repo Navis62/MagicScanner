@@ -17,7 +17,7 @@ LOW_CONFIDENCE = 0.5   # en dessous, l'interface demande de vérifier la carte
 CHROME_PROFILE = DATA / "chrome-profile"
 
 # --- Vente (POC : tout est NM, prix fixe) ---------------------------------------------------------------------
-DEFAULT_PRICE = float(os.environ.get("MS_PRICE", "0.20"))
+DEFAULT_PRICE = float(os.environ.get("MS_PRICE", "0.18"))
 DEFAULT_CONDITION = "NM"
 MIN_PRICE = 0.02   # prix minimum accepté par Cardmarket
 PRICE_ALERT_MARGIN = float(os.environ.get("MS_ALERT_MARGIN", "0.50"))  # alarme si tendance > prix de vente + cette marge
