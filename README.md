@@ -43,6 +43,7 @@ Sous l'aperçu : zoom, « Cadrer », « Autofocus » (relance la mise au point),
 |---|---|
 | `Espace` | scanne la carte (elle est ajoutée au stock immédiatement) |
 | `Échap` / `Retour arrière` | annule le dernier scan ; chaque appui remonte d'un scan |
+| `+` / « Encore une » | ajoute un exemplaire de plus de la dernière carte (même impression, langue, finition, prix) sans la scanner |
 | `1`–`9` / clic | corrige : remplace par une autre impression proposée |
 | `L` | bascule VO / VF |
 | `F` | coche / décoche « Foil » |

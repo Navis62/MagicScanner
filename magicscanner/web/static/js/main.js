@@ -88,6 +88,24 @@ const reassign = safe(async (cardId, lang, foil = null, newPrice = null) => {
   refresh(r.stats);
 });
 
+// Un exemplaire de plus de la dernière carte ajoutée, à l'identique (édition, langue, finition, prix), sans scanner.
+const addSame = safe(async () => {
+  if (busy || !editable()) return;
+  busy = true;
+  try {
+    const { card, lang } = current;
+    const r = await api.addManual(card.card_id, lang, !!card.foil, card.price);
+    current = { ...current, scanId: r.scan_id, card: r.card, searched: false };
+    view.showCard(r.card, lang);
+    view.setResultState("ok");
+    view.setStatus(`Encore une ✔ — ${r.card.quantity} en stock`, "ok");
+    sound.ok();
+    refresh(r.stats);
+  } finally {
+    busy = false;
+  }
+});
+
 const addManual = safe(async (cardId, lang) => {
   const r = await api.addManual(cardId, lang, foilOn(), price());
   current = { mode: "scan", scanId: r.scan_id, card: r.card, lang, alternatives: current?.alternatives || [] };
@@ -148,6 +166,7 @@ function onKey(e) {
   }
   if (e.code === "Space") { e.preventDefault(); scan(); }
   else if (e.key === "Escape" || e.key === "Backspace") { e.preventDefault(); undo(); }
+  else if (e.key === "+") { e.preventDefault(); addSame(); }
   else if (e.key.toLowerCase() === "l") toggleLang();
   else if (e.key.toLowerCase() === "f") setFoil(!foilOn());
   else if (e.key === "/") { e.preventDefault(); $("search").focus(); }
@@ -158,6 +177,7 @@ function onKey(e) {
 function init() {
   $("btn-next").addEventListener("click", scan);
   $("btn-undo").addEventListener("click", undo);
+  $("btn-same").addEventListener("click", addSame);
   $("lang").addEventListener("click", toggleLang);
   $("price").addEventListener("change", onPriceChange);
   $("foil").addEventListener("change", (e) => { setFoil(e.target.checked); e.target.blur(); });
