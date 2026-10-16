@@ -196,7 +196,7 @@ def powertools_rows(con: sqlite3.Connection, everything: bool = False) -> list[s
     already = "0" if everything else "i.exported_quantity"
     return con.execute(
         f"""SELECT i.id AS line_id, i.quantity - {already} AS amount, i.lang, i.condition, i.price, i.foil,
-                   c.name, c.cardmarket_id, s.name AS set_name
+                   c.name, c.cardmarket_id, s.code AS set_code, s.name AS set_name
             FROM inventory i JOIN cards c ON c.id = i.card_id JOIN sets s ON s.code = c.set_code
             WHERE i.quantity > {already} ORDER BY s.name, c.name"""
     ).fetchall()
