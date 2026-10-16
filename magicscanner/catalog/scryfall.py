@@ -95,25 +95,37 @@ def _read_bulk(path: Path):
                 yield json.loads(line)
 
 
+def _card_row(c: dict, oracle_id: str | None) -> tuple:
+    return (
+        c["id"], oracle_id, c["name"], _front(c, "name"), c["set"], c["collector_number"], c.get("rarity"),
+        c.get("cardmarket_id"), _image(c, "normal"), _image(c, "small"), c.get("released_at"),
+        c.get("layout"), c.get("frame"), int(bool(c.get("promo"))), c.get("set_type"),
+        ",".join(c.get("finishes", [])), ",".join(c.get("promo_types", [])),
+    )
+
+
 def import_cards(con: sqlite3.Connection, path: Path) -> None:
     cards, localized, names = [], [], set()
+    en_keys: set[tuple[str, str]] = set()
+    fr_only: dict[tuple[str, str], tuple] = {}   # éditions sans fiche anglaise (ex. FBB) : la fiche FR sert d'impression
     for c in filter(_keep, _read_bulk(path)):
         oracle_id = c.get("oracle_id") or (c.get("card_faces") or [{}])[0].get("oracle_id")
+        key = (c["set"], c["collector_number"])
         if c["lang"] == "en":
-            cards.append((
-                c["id"], oracle_id, c["name"], _front(c, "name"), c["set"], c["collector_number"], c.get("rarity"),
-                c.get("cardmarket_id"), _image(c, "normal"), _image(c, "small"), c.get("released_at"),
-                c.get("layout"), c.get("frame"), int(bool(c.get("promo"))), c.get("set_type"),
-                ",".join(c.get("finishes", [])), ",".join(c.get("promo_types", [])),
-            ))
+            cards.append(_card_row(c, oracle_id))
+            en_keys.add(key)
             names.add((oracle_id, "en", _front(c, "name")))
         else:
             printed = c.get("printed_name") or " // ".join(f.get("printed_name", "") for f in c.get("card_faces", [])) or None
             front = _front(c, "printed_name")
             localized.append((c["id"], c["lang"], oracle_id, c["set"], c["collector_number"], printed, front, _image(c, "normal")))
+            fr_only.setdefault(key, _card_row(c, oracle_id))
             if front:
                 names.add((oracle_id, c["lang"], front))
 
+    orphans = [row for key, row in fr_only.items() if key not in en_keys]
+    cards += orphans
+    names.update((row[1], "en", row[3]) for row in orphans)
     # cards est référencée par l'inventaire : mise à jour en place, jamais de DELETE.
     con.executemany(
         f"""INSERT INTO cards ({", ".join(CARD_COLUMNS)}) VALUES ({", ".join("?" * len(CARD_COLUMNS))})
