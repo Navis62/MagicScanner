@@ -53,6 +53,11 @@ et à la dernière carte scannée si on les change juste après. Un foil, ou une
 de stock. Une impression qui n'existe pas dans la finition scannée n'est jamais choisie (foil-only pour une carte non-foil
 et inversement).
 
+**Édition fixée** : pour un paquet d'une seule édition, le champ « Édition » (touche `E`, nom ou code de l'édition) limite
+la reconnaissance aux cartes de cette édition, avec leurs noms VO comme VF. C'est plus rapide (seules ses impressions sont comparées)
+et il y a moins de confusions possibles. Une carte d'une autre édition glissée dans le paquet est quand même reconnue si son nom est lu nettement
+mieux, mais elle est signalée en orange (« hors de l'édition fixée »). Le choix est mémorisé ; ✕ revient à toutes les éditions.
+
 Un cadre orange = confiance faible ou choix ambigu entre deux impressions (autre produit Cardmarket) : à vérifier.
 Le prix tendance Cardmarket (foil si la case est cochée) est affiché ; si elle dépasse le prix de vente de plus de 0,50 €
 (`MS_ALERT_MARGIN`), il passe en rouge et une alarme sonore retentit. « Prix tendance ↻ » retélécharge le guide des prix

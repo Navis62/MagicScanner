@@ -13,6 +13,7 @@ NAME_TIE_MARGIN = 5     # noms gardés en lice s'ils sont à moins de 5 points d
 MAX_ORACLES = 3
 TITLE_FOUND = 92        # score minimal d'un nom lu dans l'image entière pour y repérer la carte
 AMBIGUOUS_GAP = 0.15   # deux premières impressions plus proches que ça ET vendues dans des produits différents
+OFF_SET_MARGIN = 8     # édition fixée : un nom hors édition ne l'emporte que s'il est lu nettement mieux
 
 
 @dataclass
@@ -28,6 +29,7 @@ class Recognition:
     corners: list | None = None
     list_symbol: float = 0.0   # confiance (0-1) que le symbole The List est présent
     ambiguous: bool = False    # le choix entre deux produits Cardmarket différents ne tient qu'à peu de chose
+    off_set: bool = False      # une édition était fixée mais la carte n'en fait pas partie
 
     @property
     def best(self) -> Candidate | None:
@@ -56,39 +58,55 @@ class Recognizer:
         self.ocr = engine or ocr.OcrEngine()
         self._pool = ThreadPoolExecutor(8)  # téléchargement / comparaison des images candidates
 
-    def _read_card(self, card: np.ndarray) -> tuple[np.ndarray, list[ocr.OcrLine], list[str], list[NameMatch]]:
+    def _match_names(self, texts: list[str], locked_set: str | None) -> list[NameMatch]:
+        """Noms correspondant aux textes lus. Édition fixée : on cherche d'abord parmi ses cartes (bien moins de
+        confusions possibles) ; une carte d'une autre édition glissée dans le paquet n'est retenue que si son nom est
+        lu nettement mieux que le meilleur nom de l'édition."""
+        found = self.catalog.match_names(texts)
+        if not locked_set:
+            return found
+        in_set = self.catalog.match_names(texts, set_code=locked_set)
+        if in_set and (not found or in_set[0].score >= found[0].score - OFF_SET_MARGIN):
+            return in_set
+        return found
+
+    def _read_card(self, card: np.ndarray, locked_set: str | None = None
+                   ) -> tuple[np.ndarray, list[ocr.OcrLine], list[str], list[NameMatch]]:
         """OCR + nom ; si rien ne correspond, la carte est peut-être à l'envers : on retourne et on relit."""
         attempt = None
         for img in (card, cv2.rotate(card, cv2.ROTATE_180)):
             lines = self.ocr.read(img)
             titles = ocr.title_candidates(lines)
-            matches = self.catalog.match_names(titles) if titles else []
+            matches = self._match_names(titles, locked_set) if titles else []
             attempt = attempt or (img, lines, titles, matches)
             if matches:
                 return img, lines, titles, matches
         return attempt
 
-    def _locate_by_text(self, frame: np.ndarray) -> np.ndarray | None:
+    def _locate_by_text(self, frame: np.ndarray, locked_set: str | None = None) -> np.ndarray | None:
         """Dernier recours : lit toute l'image, repère une ligne qui est un nom de carte (bandeau du titre) et la ligne
         du bas alignée dessous, et en déduit la position de la carte."""
         lines = self.ocr.read_pixels(frame)
         titles = [(m[0].score, -l.y, l) for l in lines
-                  if len(l.text) >= 4 and (m := self.catalog.match_names([l.text])) and m[0].score >= TITLE_FOUND]
+                  if len(l.text) >= 4 and (m := self._match_names([l.text], locked_set)) and m[0].score >= TITLE_FOUND]
         for _, _, title in sorted(titles, key=lambda t: t[:2], reverse=True):
             below = [l for l in lines if l.y > title.y + 6 * title.height and abs(l.x - title.x) < 0.15 * (l.y - title.y)]
             if below:
                 return ocr.card_from_title(title, max(below, key=lambda l: l.y))
         return None
 
-    def recognize(self, frame: np.ndarray, previous_set: str | None = None, foil: bool = False) -> Recognition:
+    def recognize(self, frame: np.ndarray, previous_set: str | None = None, foil: bool = False,
+                  locked_set: str | None = None) -> Recognition:
+        """`locked_set` : édition fixée (paquet d'une seule édition) ; seules ses impressions sont envisagées, sauf si la
+        carte n'en fait manifestement pas partie."""
         card, corners = detect.extract(frame)
         if card is not None:
-            card, lines, titles, matches = self._read_card(card)
+            card, lines, titles, matches = self._read_card(card, locked_set)
         if card is None or not matches:
             # Contour introuvable ou mal choisi (bord noir dans l'ombre) : on retrouve la carte par son texte.
-            located = self._locate_by_text(frame)
+            located = self._locate_by_text(frame, locked_set)
             if located is not None:
-                card, lines, titles, matches = self._read_card(detect.warp(frame, located))
+                card, lines, titles, matches = self._read_card(detect.warp(frame, located), locked_set)
                 corners = located
         if card is None:
             return Recognition(False, "Carte non détectée : vérifie le cadrage / l'éclairage")
@@ -112,6 +130,10 @@ class Recognizer:
             list_symbol=list_symbol.evidence(rec.list_symbol),
         )
         printings = self.catalog.printings([m.oracle_id for m in contenders])
+        if locked_set:
+            in_set = [p for p in printings if p["set_code"] == locked_set]
+            rec.off_set = not in_set
+            printings = in_set or printings
         rec.candidates = sorted(self._pool.map(lambda p: score_printing(card, p, evidence), printings),
                                 key=lambda c: -c.score)
         if rec.candidates:

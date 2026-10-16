@@ -5,11 +5,12 @@ async function request(url, options = {}) {
   return r.json();
 }
 
-const postImage = (url, blob, foil = false, price = 0.2) => {
+const postImage = (url, blob, foil = false, price = 0.18, lockedSet = "") => {
   const body = new FormData();
   body.append("image", blob, "frame.jpg");
   body.append("foil", foil);
   body.append("price", price);
+  body.append("locked_set", lockedSet);
   return request(url, { method: "POST", body });
 };
 
@@ -17,13 +18,15 @@ const postJson = (url, data) =>
   request(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
 
 export const api = {
-  scan: (blob, foil, price) => postImage("/api/scan", blob, foil, price),
+  scan: (blob, foil, price, lockedSet) => postImage("/api/scan", blob, foil, price, lockedSet),
   detect: (blob) => postImage("/api/detect", blob),
   undo: () => request("/api/undo", { method: "POST" }),
   reassign: (scanId, cardId, lang, foil = null, price = null) =>
     postJson(`/api/scans/${scanId}/reassign`, { card_id: cardId, lang, foil, price }),
   addManual: (cardId, lang, foil, price) => postJson("/api/manual", { card_id: cardId, lang, foil, price }),
-  search: (q) => request("/api/search?q=" + encodeURIComponent(q)),
+  search: (q, lockedSet = "") =>
+    request(`/api/search?q=${encodeURIComponent(q)}&locked_set=${encodeURIComponent(lockedSet)}`),
+  sets: () => request("/api/sets"),
   stats: () => request("/api/stats"),
   recent: (limit = 20) => request(`/api/recent?limit=${limit}`),
   exportPowertools: async () => {

@@ -37,6 +37,11 @@
   </div>
   <label class="foil-toggle" title="Les prochains scans sont des foils (F)"><input type="checkbox" id="foil"> Foil <kbd>F</kbd></label>
   <label class="price-field" title="Prix de vente des prochains scans (modifie aussi la dernière carte scannée)">Prix <input type="number" id="price" min="0.02" step="0.05" value="0.18"> €</label>
+  <label class="set-field" id="set-field" title="Paquet d'une seule édition : fixe l'édition des prochains scans (reconnaissance plus rapide et plus sûre ; une carte d'une autre édition reste reconnue mais signalée) — E">
+    Édition <input id="locked-set" list="sets-list" placeholder="toutes" autocomplete="off" spellcheck="false">
+    <button id="locked-set-clear" class="ghost" title="Toutes les éditions">✕</button>
+  </label>
+  <datalist id="sets-list"></datalist>
   <select id="camera" title="Caméra"></select>
 </header>
 
@@ -137,6 +142,7 @@
   <span><kbd>Échap</kbd> annuler</span>
   <span><kbd>L</kbd> VO / VF</span>
   <span><kbd>F</kbd> foil</span>
+  <span><kbd>E</kbd> fixer l'édition</span>
   <span><kbd>1</kbd>–<kbd>9</kbd> corriger l'édition</span>
   <span><kbd>/</kbd> rechercher</span>
 </footer>

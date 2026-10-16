@@ -2,6 +2,7 @@ import csv
 import io
 
 from magicscanner import inventory, powertools
+from magicscanner.config import DEFAULT_PRICE
 
 
 def _rows(content):
@@ -16,7 +17,7 @@ def test_export_only_contains_new_cards(con):
     rows = _rows(content)
     assert (lines, skipped) == (2, 0)
     assert rows[0] == {"cardmarketId": "252482", "quantity": "2", "name": "Gravecrawler", "set": "Dark Ascension",
-                       "condition": "NM", "language": "French", "isSigned": "false", "price": "0.20", "comment": "",
+                       "condition": "NM", "language": "French", "isSigned": "false", "price": f"{DEFAULT_PRICE:.2f}", "comment": "",
                        "finishType": "Regular", "buyPrice": ""}
     assert rows[1]["language"] == "English"
     assert inventory.stats(con)["to_export"] == 0

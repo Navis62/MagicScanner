@@ -341,7 +341,11 @@ main > .panel { min-width: 0; }
 .report .bar i { display: block; height: 100%; background: var(--violet); transition: width .4s; }
 
 /* Foil, prix de vente */
-.foil-toggle, .price-field { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.foil-toggle, .price-field, .set-field { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.set-field input { width: 190px; }
+.set-field button { padding: 4px 8px; }
+.set-field:not(.active) button { visibility: hidden; }
+.set-field.active input { color: var(--gold-hi); border-color: var(--gold); }
 .foil-toggle { padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; user-select: none; }
 .foil-toggle:has(input:checked), .badge.foil, .chip.foil {
   color: #0d1b2a; border-color: #8fd3ff; background: linear-gradient(120deg, #bfe6ff, #e9d5ff 55%, #bfe6ff);

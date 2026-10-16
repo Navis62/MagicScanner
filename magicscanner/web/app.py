@@ -88,6 +88,8 @@ def _card(card_id: str, lang: str | None = None, candidate: Candidate | None = N
 
 
 def _review_reason(rec) -> str | None:
+    if rec.off_set:
+        return "hors de l'édition fixée"
     if rec.confidence < LOW_CONFIDENCE:
         return "confiance faible"
     if rec.ambiguous:
@@ -128,11 +130,12 @@ def index():
 
 @app.post("/api/scan")
 async def scan(image: UploadFile = File(...), foil: bool = Form(False),
-               price: float = Form(DEFAULT_PRICE, ge=MIN_PRICE)):
-    """Reconnaît la carte et l'ajoute immédiatement au stock (annulable)."""
+               price: float = Form(DEFAULT_PRICE, ge=MIN_PRICE), locked_set: str = Form("")):
+    """Reconnaît la carte et l'ajoute immédiatement au stock (annulable). `locked_set` : édition fixée (paquet d'une
+    seule édition), vide pour toutes."""
     frame = await _decode(image)
     with svc.lock:
-        rec = svc.recognizer.recognize(frame, previous_set=svc.previous_set, foil=foil)
+        rec = svc.recognizer.recognize(frame, previous_set=svc.previous_set, foil=foil, locked_set=locked_set or None)
         out = {
             "ok": rec.ok, "error": rec.error, "lang": rec.lang, "confidence": rec.confidence,
             "title": rec.title, "ocr": rec.lines, "corners": rec.corners, "list_symbol": rec.list_symbol,
@@ -150,7 +153,7 @@ async def scan(image: UploadFile = File(...), foil: bool = Form(False),
         svc.previous_set = card["set_code"]
         return out | {
             "scan_id": scan_id,
-            "needs_review": rec.confidence < LOW_CONFIDENCE or rec.ambiguous,
+            "needs_review": _review_reason(rec) is not None,
             "review_reason": _review_reason(rec),
             "card": card,
             "alternatives": [_card(c.card_id, candidate=c) for c in rec.candidates[1:1 + MAX_ALTERNATIVES]],
@@ -207,11 +210,18 @@ def reassign(scan_id: int, body: CardChoice):
 
 
 @app.get("/api/search")
-def search(q: str):
-    """Recherche manuelle par nom (VO ou VF)."""
+def search(q: str, locked_set: str = ""):
+    """Recherche manuelle par nom (VO ou VF) ; les impressions de l'édition fixée viennent en tête."""
     with svc.lock:
-        lang, card_ids = svc.catalog.search(q)
+        lang, card_ids = svc.catalog.search(q, set_code=locked_set or None)
         return {"lang": lang, "results": [_card(cid) for cid in card_ids]}
+
+
+@app.get("/api/sets")
+def sets():
+    """Éditions proposées pour fixer l'édition du paquet scanné."""
+    with svc.lock:
+        return svc.catalog.sets()
 
 
 @app.get("/api/stats")

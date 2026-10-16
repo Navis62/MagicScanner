@@ -50,13 +50,24 @@ class Catalog:
         self._names = [normalize(r["name"]) for r in rows]
         self._meta = [(r["oracle_id"], r["lang"], r["name"]) for r in rows]
         self.fr_sets = {r[0] for r in con.execute("SELECT DISTINCT set_code FROM localized WHERE lang='fr'")}
+        self._by_set: dict[str, tuple[list[str], list[tuple]]] = {}
 
-    def match_names(self, texts: list[str], min_score: float = 70) -> list[NameMatch]:
-        """Meilleure correspondance par carte (oracle), tous textes confondus, triée par score."""
+    def _names_in_set(self, set_code: str) -> tuple[list[str], list[tuple]]:
+        """Noms (toutes langues) des cartes imprimées dans une édition : la liste de recherche quand l'édition est fixée."""
+        if set_code not in self._by_set:
+            oracles = {r[0] for r in self.con.execute("SELECT DISTINCT oracle_id FROM cards WHERE set_code = ?", (set_code,))}
+            keep = [i for i, meta in enumerate(self._meta) if meta[0] in oracles]
+            self._by_set[set_code] = [self._names[i] for i in keep], [self._meta[i] for i in keep]
+        return self._by_set[set_code]
+
+    def match_names(self, texts: list[str], min_score: float = 70, set_code: str | None = None) -> list[NameMatch]:
+        """Meilleure correspondance par carte (oracle), tous textes confondus, triée par score. Avec `set_code`, seules
+        les cartes de cette édition sont envisagées."""
+        names, metas = self._names_in_set(set_code) if set_code else (self._names, self._meta)
         best: dict[str, NameMatch] = {}
         for text in texts:
-            for _, score, idx in process.extract(normalize(text), self._names, scorer=fuzz.ratio, limit=8):
-                oracle_id, lang, name = self._meta[idx]
+            for _, score, idx in process.extract(normalize(text), names, scorer=fuzz.ratio, limit=8):
+                oracle_id, lang, name = metas[idx]
                 if score >= min_score and (oracle_id not in best or score > best[oracle_id].score):
                     best[oracle_id] = NameMatch(oracle_id, lang, name, score)
         return sorted(best.values(), key=lambda m: -m.score)
@@ -67,12 +78,21 @@ class Catalog:
         marks = ",".join("?" * len(oracle_ids))
         return self.con.execute(f"{PRINTING_SQL} WHERE c.oracle_id IN ({marks})", oracle_ids).fetchall()
 
-    def search(self, query: str, limit: int = 40) -> tuple[str | None, list[str]]:
-        """Recherche manuelle : (langue du nom trouvé, impressions les plus récentes d'abord)."""
+    def sets(self) -> list[dict]:
+        """Éditions qui ont des cartes, les plus récentes d'abord (choix de l'édition fixée)."""
+        rows = self.con.execute(
+            """SELECT s.code, s.name, s.released_at FROM sets s
+               WHERE EXISTS (SELECT 1 FROM cards c WHERE c.set_code = s.code)
+               ORDER BY s.released_at DESC, s.name""").fetchall()
+        return [dict(r) for r in rows]
+
+    def search(self, query: str, limit: int = 40, set_code: str | None = None) -> tuple[str | None, list[str]]:
+        """Recherche manuelle : (langue du nom trouvé, impressions de `set_code` puis les plus récentes d'abord)."""
         matches = self.match_names([query])[:3]
         if not matches:
             return None, []
         rows = sorted(self.printings([m.oracle_id for m in matches]), key=lambda p: p["released_at"] or "", reverse=True)
+        rows.sort(key=lambda p: p["set_code"] != set_code)   # tri stable : l'édition fixée en tête
         return matches[0].lang, [p["id"] for p in rows[:limit]]
 
     def card_info(self, card_id: str, lang: str | None = None, foil: bool = False) -> dict:

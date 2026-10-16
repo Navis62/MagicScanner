@@ -2,6 +2,7 @@
 import { api } from "./api.js";
 import { grabFrame, initCamera, isReady } from "./camera.js";
 import { $ } from "./dom.js";
+import { initEdition, lockedSet } from "./edition.js";
 import { frameOnCard, initPreview, isDefaultZoom } from "./preview.js";
 import { initPublish, updateToList } from "./publish.js";
 import { sound } from "./sound.js";
@@ -36,7 +37,7 @@ const scan = safe(async () => {
   busy = true;
   view.setStatus("Analyse…", "busy");
   try {
-    const r = await api.scan(await grabFrame(), foilOn(), price());
+    const r = await api.scan(await grabFrame(), foilOn(), price(), lockedSet());
     view.showScanDebug(r.warped, r.ocr, r.list_symbol);
     if (r.corners && isDefaultZoom()) frameOnCard(r.corners);   // premier cadrage automatique
     if (!r.ok) {
@@ -113,7 +114,7 @@ function setFoil(on) {
 }
 
 /** Prix saisi (0,18 € par défaut) ; une saisie invalide revient au dernier prix valable. */
-let lastPrice = 0.2;
+let lastPrice = 0.18;
 function price() {
   const v = Math.round(parseFloat($("price").value) * 100) / 100;
   if (v >= 0.02) lastPrice = v;
@@ -134,15 +135,15 @@ function toggleLang() {
 let searchTimer;
 const search = safe(async (q) => {
   if (q.length < 3) return;
-  const r = await api.search(q);
+  const r = await api.search(q, lockedSet());
   if (editable()) current = { ...current, alternatives: r.results, searched: true };
   else current = { mode: "add", lang: r.lang || "fr", alternatives: r.results };
   showAlternatives();
 });
 
 function onKey(e) {
-  if (e.target.id === "search" || e.target.id === "price") {
-    if (e.key === "Escape" || (e.key === "Enter" && e.target.id === "price")) { e.preventDefault(); e.target.blur(); }
+  if (["search", "price", "locked-set"].includes(e.target.id)) {
+    if (e.key === "Escape" || (e.key === "Enter" && e.target.id !== "search")) { e.preventDefault(); e.target.blur(); }
     return;
   }
   if (e.code === "Space") { e.preventDefault(); scan(); }
@@ -150,6 +151,7 @@ function onKey(e) {
   else if (e.key.toLowerCase() === "l") toggleLang();
   else if (e.key.toLowerCase() === "f") setFoil(!foilOn());
   else if (e.key === "/") { e.preventDefault(); $("search").focus(); }
+  else if (e.key.toLowerCase() === "e") { e.preventDefault(); $("locked-set").focus(); }
   else if (/^[1-9]$/.test(e.key)) pickAlternative(+e.key - 1);
 }
 
@@ -169,6 +171,7 @@ function init() {
   initPreview();
   initPublish(() => refresh());
   initTools(() => refresh());
+  initEdition().catch((e) => view.setStatus("Éditions indisponibles : " + e.message, "err"));
   initCamera().catch((e) => view.setStatus("Caméra indisponible : " + e.message, "err"));
   api.stats().then((st) => { lastPrice = st.default_price; price(); }).catch(() => {});
   refresh();
