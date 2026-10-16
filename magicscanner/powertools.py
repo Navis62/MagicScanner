@@ -10,7 +10,22 @@ COLUMNS = ["cardmarketId", "quantity", "name", "set", "setCode", "condition", "l
 LANGUAGES = {"en": "English", "fr": "French"}
 # Éditions que l'import attend sous un autre nom et avec un code : (set, setCode).
 FBB = ("Foreign Black Bordered", "DTL")
+FWB_SLUG = "Foreign-White-Bordered"
 FWB = ("Foreign White Bordered", "DTU")   # Revised (3ed) en langue étrangère : Scryfall n'a pas d'édition FWB
+
+
+def _fwb_product(con: sqlite3.Connection, revised_id: int) -> int:
+    """Produit « Foreign White Bordered » équivalent à un produit Revised : même nom (et même rang pour les terrains
+    de base, qui existent en trois versions). Retombe sur l'identifiant d'origine si Cardmarket n'a pas d'équivalent."""
+    ids = lambda exp, name: [r[0] for r in con.execute(
+        "SELECT id_product FROM cm_products WHERE id_expansion=? AND name=? ORDER BY id_product", (exp, name))]
+    row = con.execute("""SELECT p.name, p.id_expansion, (SELECT id_expansion FROM cm_expansions WHERE slug=?) AS fwb
+                         FROM cm_products p WHERE p.id_product=?""", (FWB_SLUG, revised_id)).fetchone()
+    if not row or not row["fwb"]:
+        return revised_id
+    source, target = ids(row["id_expansion"], row["name"]), ids(row["fwb"], row["name"])
+    rank = source.index(revised_id)
+    return target[rank] if rank < len(target) else revised_id
 
 
 def build(con: sqlite3.Connection, everything: bool = False) -> tuple[str, int, int]:
@@ -24,13 +39,15 @@ def build(con: sqlite3.Connection, everything: bool = False) -> tuple[str, int, 
         if not r["cardmarket_id"]:
             skipped += r["amount"]
             continue
+        card_id = r["cardmarket_id"]
         if r["set_code"] == "3ed" and r["lang"] != "en":
             set_name, set_code = FWB
+            card_id = _fwb_product(con, card_id)
         elif r["set_code"] == "fbb":
             set_name, set_code = FBB
         else:
             set_name, set_code = r["set_name"], ""
-        w.writerow([r["cardmarket_id"], r["amount"], r["name"], set_name, set_code, r["condition"],
+        w.writerow([card_id, r["amount"], r["name"], set_name, set_code, r["condition"],
                     LANGUAGES.get(r["lang"], r["lang"]), "false", f"{r['price']:.2f}", "",
                     "Foil" if r["foil"] else "Regular", ""])
         exported.append(r["line_id"])

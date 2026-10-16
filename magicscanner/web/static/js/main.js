@@ -160,6 +160,7 @@ const search = safe(async (q) => {
 });
 
 function onKey(e) {
+  if (document.querySelector("dialog[open]")) return;   // une boîte de dialogue gère ses propres touches
   if (["search", "price", "locked-set"].includes(e.target.id)) {
     if (e.key === "Escape" || (e.key === "Enter" && e.target.id !== "search")) { e.preventDefault(); e.target.blur(); }
     return;

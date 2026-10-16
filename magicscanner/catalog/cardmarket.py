@@ -82,26 +82,44 @@ def map_sets(con: sqlite3.Connection) -> None:
 LIST_EXPANSIONS = (3494, 2874, 5911)
 
 
+# Éditions dont des cartes n'ont pas d'idProduct chez Scryfall : extensions Cardmarket où les chercher par le nom.
+# Éditions où les homonymes (terrains de base) se rattachent dans l'ordre : numéro de collection croissant = idProduct
+# croissant (vérifié sur les terrains de FBB déjà rattachés par Scryfall).
+ORDERED_SETS = {"fbb"}
+LINKED_SETS = {"plst": LIST_EXPANSIONS, "fbb": (57,), "ren": (60,), "psal": (105,)}
+
+
 def link_list_cards(con: sqlite3.Connection) -> int:
-    """Scryfall n'indique pas l'idProduct d'environ 1 carte plst sur 5. On le retrouve par le nom, mais seulement
-    quand ça ne laisse aucun doute : un seul produit de ce nom dans ces extensions, pas déjà pris par une autre
-    carte plst, et une seule carte plst sans identifiant de ce nom. Le reste reste en erreur plutôt que de
-    risquer une annonce sur la mauvaise page. Renvoie le nombre de cartes rattachées."""
-    marks = ",".join("?" * len(LIST_EXPANSIONS))
-    by_name: dict[str, list[int]] = defaultdict(list)
-    for p in con.execute(f"SELECT id_product, name FROM cm_products WHERE id_expansion IN ({marks})", LIST_EXPANSIONS):
-        by_name[p["name"].lower()].append(p["id_product"])
-    taken = {r[0] for r in con.execute("SELECT cardmarket_id FROM cards WHERE set_code='plst' AND cardmarket_id IS NOT NULL")}
-    missing = con.execute("SELECT id, name FROM cards WHERE set_code='plst' AND cardmarket_id IS NULL").fetchall()
-    homonyms = Counter(m["name"].lower() for m in missing)
+    """Scryfall n'indique pas l'idProduct de certaines cartes (environ 1 carte plst sur 5, quelques cartes de FBB,
+    Renaissance, Salvat). On le retrouve par le nom, mais seulement quand ça ne laisse aucun doute : un seul produit de
+    ce nom dans les extensions de l'édition, pas déjà pris par une autre carte de l'édition, et une seule carte de
+    l'édition sans identifiant de ce nom. Le reste reste en erreur plutôt que de risquer une annonce sur la mauvaise
+    page. Renvoie le nombre de cartes rattachées."""
     linked = 0
-    for card in missing:
-        name = card["name"].lower()
-        products = [p for p in by_name.get(name) or by_name.get(name.replace(" // ", " / "), []) if p not in taken]
-        if len(products) == 1 and homonyms[name] == 1:
-            con.execute("UPDATE cards SET cardmarket_id=? WHERE id=?", (products[0], card["id"]))
-            taken.add(products[0])
+    for set_code, expansions in LINKED_SETS.items():
+        marks = ",".join("?" * len(expansions))
+        by_name: dict[str, list[int]] = defaultdict(list)
+        for p in con.execute(f"SELECT id_product, name FROM cm_products WHERE id_expansion IN ({marks})", expansions):
+            by_name[p["name"].lower()].append(p["id_product"])
+        taken = {r[0] for r in con.execute("SELECT cardmarket_id FROM cards WHERE set_code=? AND cardmarket_id IS NOT NULL", (set_code,))}
+        missing = con.execute("SELECT id, name FROM cards WHERE set_code=? AND cardmarket_id IS NULL "
+                              "ORDER BY CAST(collector_number AS INTEGER), collector_number", (set_code,)).fetchall()
+        homonyms = Counter(m["name"].lower() for m in missing)
+        rank: Counter = Counter()
+        for card in missing:
+            name = card["name"].lower()
+            products = sorted(p for p in by_name.get(name) or by_name.get(name.replace(" // ", " / "), []) if p not in taken)
+            if len(products) == 1 and homonyms[name] == 1:
+                pick = products[0]
+            elif set_code in ORDERED_SETS and len(products) == homonyms[name]:
+                pick = products[rank[name]]
+                rank[name] += 1
+            else:
+                continue
+            con.execute("UPDATE cards SET cardmarket_id=? WHERE id=?", (pick, card["id"]))
             linked += 1
+            if pick in products and len(products) == 1:
+                taken.add(pick)
     con.commit()
-    log.info("The List / Mystery Booster : %d cartes rattachées à leur produit Cardmarket par le nom", linked)
+    log.info("%d cartes rattachées à leur produit Cardmarket par le nom", linked)
     return linked

@@ -353,3 +353,18 @@ main > .panel { min-width: 0; }
 .price-field input { width: 72px; text-align: right; appearance: textfield; -moz-appearance: textfield; }
 .price-field input::-webkit-inner-spin-button, .price-field input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 button.ghost.active { color: var(--ok); }
+
+/* ───────── Boîte de confirmation ───────── */
+dialog.modal {
+  width: min(440px, calc(100vw - 32px)); padding: 22px 24px; color: var(--text);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .03), transparent 40%), var(--panel);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, .9), 0 0 60px -20px rgba(139, 124, 246, .35);
+  animation: pop .25s cubic-bezier(.2, .9, .3, 1.2);
+}
+dialog.modal::backdrop { background: rgba(5, 7, 11, .7); backdrop-filter: blur(4px); }
+.modal-title { margin-bottom: 12px; font: 700 18px var(--display); letter-spacing: .02em; color: var(--gold-hi); }
+dialog.modal p { margin-top: 10px; color: var(--muted); line-height: 1.55; }
+dialog.modal p:first-of-type { color: var(--text); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+.modal-actions button { padding: 9px 18px; }

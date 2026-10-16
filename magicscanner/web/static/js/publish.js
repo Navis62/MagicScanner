@@ -1,6 +1,7 @@
 // Publication sur Cardmarket : boutons, progression, rapport de fin.
 import { api } from "./api.js";
 import { $, esc, plural } from "./dom.js";
+import { confirmDialog } from "./dialog.js";
 import { setStatus } from "./view.js";
 
 const POLL_MS = 1500;
@@ -67,10 +68,13 @@ async function poll() {
 
 async function start() {
   const message = `Mettre en vente ${plural(toList.cards, "carte")} `
-    + `(${plural(toList.lines, "référence")}, ${euros(toList.value)} au total) sur Cardmarket ?\n\n`
-    + "Chrome va s'ouvrir et publier pour de vrai sur ton compte.\n"
+    + `(${plural(toList.lines, "référence")}, ${euros(toList.value)} au total) sur Cardmarket ?
+
+`
+    + "Chrome va s'ouvrir et publier pour de vrai sur ton compte.
+"
     + "Les exemplaires déjà en vente ne sont pas republiés.";
-  if (!confirm(message)) return;
+  if (!await confirmDialog({ title: "Publier sur Cardmarket", message, ok: "Publier" })) return;
   await api.publish();
   running = true;
   renderButtons();
@@ -78,10 +82,11 @@ async function start() {
 }
 
 async function reset() {
-  if (!confirm(`Marquer ${plural(toList.cards, "carte")} comme déjà en vente sur Cardmarket ?
+  const message = `Marquer ${plural(toList.cards, "carte")} comme déjà en vente sur Cardmarket ?
 
 `
-    + "Elles ne seront plus proposées à la publication (à utiliser quand elles ont été publiées via TCG Powertools).")) return;
+    + "Elles ne seront plus proposées à la publication (à utiliser quand elles ont été publiées via TCG Powertools).";
+  if (!await confirmDialog({ title: "Déjà en vente", message, ok: "Marquer", danger: true })) return;
   const r = await api.publishReset();
   setStatus(`${plural(r.marked, "carte")} marquée${r.marked > 1 ? "s" : ""} comme déjà en vente`, "ok");
   onFinished();
