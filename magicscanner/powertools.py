@@ -5,12 +5,12 @@ import sqlite3
 
 from . import inventory
 
-COLUMNS = ["cardmarketId", "quantity", "name", "set", "condition", "language", "isSigned", "price", "comment",
+COLUMNS = ["cardmarketId", "quantity", "name", "set", "setCode", "condition", "language", "isSigned", "price", "comment",
            "finishType", "buyPrice"]
 LANGUAGES = {"en": "English", "fr": "French"}
-# Éditions que l'import attend sous un autre libellé que le nom Scryfall.
-SET_LABELS = {"fbb": "DTL - Foreign Black Bordered"}
-FWB_LABEL = "DTU - Foreign White Bordered"   # Revised (3ed) en langue étrangère : Scryfall n'a pas d'édition FWB
+# Éditions que l'import attend sous un autre nom et avec un code : (set, setCode).
+FBB = ("Foreign Black Bordered", "DTL")
+FWB = ("Foreign White Bordered", "DTU")   # Revised (3ed) en langue étrangère : Scryfall n'a pas d'édition FWB
 
 
 def build(con: sqlite3.Connection, everything: bool = False) -> tuple[str, int, int]:
@@ -24,8 +24,13 @@ def build(con: sqlite3.Connection, everything: bool = False) -> tuple[str, int, 
         if not r["cardmarket_id"]:
             skipped += r["amount"]
             continue
-        set_label = FWB_LABEL if r["set_code"] == "3ed" and r["lang"] != "en" else SET_LABELS.get(r["set_code"], r["set_name"])
-        w.writerow([r["cardmarket_id"], r["amount"], r["name"], set_label, r["condition"],
+        if r["set_code"] == "3ed" and r["lang"] != "en":
+            set_name, set_code = FWB
+        elif r["set_code"] == "fbb":
+            set_name, set_code = FBB
+        else:
+            set_name, set_code = r["set_name"], ""
+        w.writerow([r["cardmarket_id"], r["amount"], r["name"], set_name, set_code, r["condition"],
                     LANGUAGES.get(r["lang"], r["lang"]), "false", f"{r['price']:.2f}", "",
                     "Foil" if r["foil"] else "Regular", ""])
         exported.append(r["line_id"])
