@@ -1,7 +1,7 @@
 // MagicScanner — orchestration : état du scan courant, actions, raccourcis clavier.
 import { api } from "./api.js";
 import { grabFrame, initCamera, isReady } from "./camera.js";
-import { $ } from "./dom.js";
+import { $, store } from "./dom.js";
 import { initEdition, lockedSet } from "./edition.js";
 import { frameOnCard, initPreview, isDefaultZoom } from "./preview.js";
 import { initPublish, updateToList } from "./publish.js";
@@ -54,7 +54,7 @@ const scan = safe(async () => {
     const low = r.needs_review;
     view.setResultState(low ? "warn" : "ok");
     view.setStatus(low ? `Ajoutée — à vérifier (${r.review_reason})` : "Ajoutée ✔ — Espace pour la suivante", low ? "busy" : "ok");
-    r.card.price_alert ? sound.alarm() : low ? sound.check() : sound.ok();
+    alarmed(r.card) ? sound.alarm() : low ? sound.check() : sound.ok();
     refresh(r.stats);
   } finally {
     busy = false;
@@ -84,7 +84,7 @@ const reassign = safe(async (cardId, lang, foil = null, newPrice = null) => {
   view.showCard(r.card, lang);
   view.setResultState("ok");
   view.setStatus("Corrigé ✔", "ok");
-  if (r.card.price_alert) sound.alarm();
+  if (alarmed(r.card)) sound.alarm();
   refresh(r.stats);
 });
 
@@ -112,7 +112,7 @@ const addManual = safe(async (cardId, lang) => {
   view.showCard(r.card, lang);
   view.setResultState("ok");
   view.setStatus("Ajoutée manuellement ✔", "ok");
-  if (r.card.price_alert) sound.alarm();
+  if (alarmed(r.card)) sound.alarm();
   refresh(r.stats);
 });
 
@@ -124,6 +124,9 @@ function pickAlternative(i) {
 }
 
 const foilOn = () => $("foil").checked;
+
+/** Alarme : carte bien plus chère que le prix de vente, ou rare/mythique si la case « Alarme rare » est cochée. */
+const alarmed = (card) => card.price_alert || ($("rare-alarm").checked && ["rare", "mythic"].includes(card.rarity));
 
 /** La case s'applique aux prochains scans ; si une carte vient d'être scannée, elle bascule aussi. */
 function setFoil(on) {
@@ -181,6 +184,8 @@ function init() {
   $("btn-same").addEventListener("click", addSame);
   $("lang").addEventListener("click", toggleLang);
   $("price").addEventListener("change", onPriceChange);
+  $("rare-alarm").checked = store.get("rareAlarm", false);
+  $("rare-alarm").addEventListener("change", (e) => { store.set("rareAlarm", e.target.checked); e.target.blur(); });
   $("foil").addEventListener("change", (e) => { setFoil(e.target.checked); e.target.blur(); });
   $("search").addEventListener("input", (e) => {
     clearTimeout(searchTimer);

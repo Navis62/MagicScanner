@@ -58,7 +58,18 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="MagicScanner", lifespan=lifespan)
-app.mount("/static", StaticFiles(directory=STATIC), name="static")
+
+
+class FreshStaticFiles(StaticFiles):
+    """Le navigateur revalide les fichiers à chaque chargement : une mise à jour du JS/CSS est vue sans vider le cache."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+app.mount("/static", FreshStaticFiles(directory=STATIC), name="static")
 
 
 class CardChoice(BaseModel):
