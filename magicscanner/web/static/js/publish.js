@@ -68,11 +68,8 @@ async function poll() {
 
 async function start() {
   const message = `Mettre en vente ${plural(toList.cards, "carte")} `
-    + `(${plural(toList.lines, "référence")}, ${euros(toList.value)} au total) sur Cardmarket ?
-
-`
-    + "Chrome va s'ouvrir et publier pour de vrai sur ton compte.
-"
+    + `(${plural(toList.lines, "référence")}, ${euros(toList.value)} au total) sur Cardmarket ?\n\n`
+    + "Chrome va s'ouvrir et publier pour de vrai sur ton compte.\n"
     + "Les exemplaires déjà en vente ne sont pas republiés.";
   if (!await confirmDialog({ title: "Publier sur Cardmarket", message, ok: "Publier" })) return;
   await api.publish();
