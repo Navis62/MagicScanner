@@ -22,7 +22,6 @@ from ..config import (
     KEEP_SCANS,
     LOW_CONFIDENCE,
     MIN_PRICE,
-    PRICE_ALERT_MARGIN,
     SCANS_DIR,
     ensure_dirs,
 )
@@ -91,7 +90,6 @@ def _card(card_id: str, lang: str | None = None, candidate: Candidate | None = N
     """Fiche pour l'UI : référentiel + stock (quantité, dont déjà publiées) (+ détail du score si candidate)."""
     info = svc.catalog.card_info(card_id, lang, foil)
     info["foil"], info["price"] = foil, price
-    info["price_alert"] = bool(info["trend"] and info["trend"] > price + PRICE_ALERT_MARGIN)
     info["quantity"], info["listed"] = inventory.quantity(svc.con, card_id, lang, foil, price) if lang else (0, 0)
     if candidate:
         info.update(asdict(candidate))

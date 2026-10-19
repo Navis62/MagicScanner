@@ -34,6 +34,20 @@ export function showScanDebug(warped, ocrLines, listSymbol = null) {
   }
 }
 
+// Seuil d'alerte : marge (€) au-dessus du prix de vente à partir de laquelle le prix tendance sonne l'alarme.
+let alertMargin = 0.5;
+export const setAlertMargin = (m) => { alertMargin = m; };
+export const priceAlert = (card) => card.trend != null && card.trend > card.price + alertMargin;
+
+export function showTrend(card) {
+  const trend = $("trend");
+  const alert = priceAlert(card);
+  trend.textContent = card.trend != null
+    ? `${card.trend.toFixed(2).replace(".", ",")} €${alert ? "  ⚠ bien plus que le prix de vente !" : ""}`
+    : "—";
+  trend.className = alert ? "alert" : "";
+}
+
 export function showCard(card, lang, confidence = null, needsReview = false) {
   const result = $("result");
   result.dataset.empty = "false";
@@ -60,11 +74,7 @@ export function showCard(card, lang, confidence = null, needsReview = false) {
   $("list-badge").textContent = card.list_label || "";
   $("cm-exp").textContent = card.cm_expansion || "—";
   $("trend-label").textContent = card.foil ? "Tendance foil" : "Prix tendance";
-  const trend = $("trend");
-  trend.textContent = card.trend != null
-    ? `${card.trend.toFixed(2).replace(".", ",")} €${card.price_alert ? "  ⚠ bien plus que le prix de vente !" : ""}`
-    : "—";
-  trend.className = card.price_alert ? "alert" : "";
+  showTrend(card);
   $("price-val").textContent = card.price != null ? card.price.toFixed(2).replace(".", ",") + " €" : "—";
   const toList = card.quantity - (card.listed || 0);
   $("qty").textContent = card.listed

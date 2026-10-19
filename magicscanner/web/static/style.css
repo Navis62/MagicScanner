@@ -89,7 +89,7 @@ button.ghost:hover:not(:disabled) { color: var(--text); background: var(--panel-
 /* ───────── En-tête ───────── */
 .topbar {
   position: sticky; top: 0; z-index: 10;
-  display: flex; align-items: center; gap: 28px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 28px;
   padding: 12px 24px;
   background: rgba(12, 15, 22, .82);
   backdrop-filter: blur(14px);
@@ -112,7 +112,11 @@ button.ghost:hover:not(:disabled) { color: var(--text); background: var(--panel-
 .stat.hot b { color: var(--gold-hi); }
 
 .publish { display: flex; gap: 8px; }
-.publish button { padding: 10px 18px; }
+/* 2e ligne de l'en-tête : réglages des prochains scans */
+.controls { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+.controls label { white-space: nowrap; }
+.controls select#camera { margin-left: auto; }
+.publish button { padding: 10px 18px; white-space: nowrap; }
 select#camera { max-width: 220px; text-overflow: ellipsis; }
 
 /* ───────── Rapport de publication ───────── */
@@ -319,6 +323,7 @@ dd { margin: 0; font-size: 15px; min-width: 0; font-variant-numeric: tabular-num
   .cam { width: 100%; max-width: 420px; justify-self: center; }
   .topbar { flex-wrap: wrap; gap: 14px; }
   .stats { order: 3; flex-basis: 100%; }
+  .controls { order: 4; }
 }
 @media (max-width: 640px) {
   .result { grid-template-columns: 1fr; }

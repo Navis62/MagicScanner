@@ -60,8 +60,8 @@ et il y a moins de confusions possibles. Une carte d'une autre édition glissée
 mieux, mais elle est signalée en orange (« hors de l'édition fixée »). Le choix est mémorisé ; ✕ revient à toutes les éditions.
 
 Un cadre orange = confiance faible ou choix ambigu entre deux impressions (autre produit Cardmarket) : à vérifier.
-Le prix tendance Cardmarket (foil si la case est cochée) est affiché ; si elle dépasse le prix de vente de plus de 0,50 €
-(`MS_ALERT_MARGIN`), il passe en rouge et une alarme sonore retentit. « Prix tendance ↻ » retélécharge le guide des prix
+Le prix tendance Cardmarket (foil si la case est cochée) est affiché ; si elle dépasse le prix de vente de plus du seuil réglable
+(champ « Alerte + », 0,50 € par défaut, mémorisé dans le navigateur), il passe en rouge et une alarme sonore retentit. « Prix tendance ↻ » retélécharge le guide des prix
 Cardmarket (mis à jour chaque nuit).
 
 ## Mettre en vente
@@ -175,7 +175,7 @@ pytest -m "not integration"   # sans la base importée
 
 ## Configuration (variables d'environnement)
 
-`MS_PRICE` (0.18, prix par défaut du champ « Prix »), `MS_ALERT_MARGIN` (0.50), `MS_KEEP_SCANS` (`low` : photos gardées seulement pour les scans à vérifier ; `none` ou `all`), `MS_CHROME` (chemin chrome.exe), `MS_CDP_PORT` (9222),
+`MS_PRICE` (0.18, prix par défaut du champ « Prix »), `MS_KEEP_SCANS` (`low` : photos gardées seulement pour les scans à vérifier ; `none` ou `all`), `MS_CHROME` (chemin chrome.exe), `MS_CDP_PORT` (9222),
 `MS_WINDOW` (`left,top,width,height` de la fenêtre Chrome, `40,40,1500,1000`), `MS_DATA` (dossier `data/`).
 
 ## Limites connues (POC)

@@ -126,7 +126,7 @@ function pickAlternative(i) {
 const foilOn = () => $("foil").checked;
 
 /** Alarme : carte bien plus chère que le prix de vente, ou rare/mythique si la case « Alarme rare » est cochée. */
-const alarmed = (card) => card.price_alert || ($("rare-alarm").checked && ["rare", "mythic"].includes(card.rarity));
+const alarmed = (card) => view.priceAlert(card) || ($("rare-alarm").checked && ["rare", "mythic"].includes(card.rarity));
 
 /** La case s'applique aux prochains scans ; si une carte vient d'être scannée, elle bascule aussi. */
 function setFoil(on) {
@@ -141,6 +141,17 @@ function price() {
   if (v >= 0.02) lastPrice = v;
   $("price").value = lastPrice.toFixed(2);
   return lastPrice;
+}
+
+/** Seuil d'alerte saisi (marge au-dessus du prix de vente, 0,50 € par défaut) ; une saisie invalide revient au dernier seuil. */
+let lastMargin = 0.5;
+function onMarginChange() {
+  const v = Math.round(parseFloat($("alert-margin").value) * 100) / 100;
+  if (v >= 0) lastMargin = v;
+  $("alert-margin").value = lastMargin.toFixed(2);
+  store.set("alertMargin", lastMargin);
+  view.setAlertMargin(lastMargin);
+  if (current) view.showTrend(current.card);
 }
 
 function onPriceChange() {
@@ -164,7 +175,7 @@ const search = safe(async (q) => {
 
 function onKey(e) {
   if (document.querySelector("dialog[open]")) return;   // une boîte de dialogue gère ses propres touches
-  if (["search", "price", "locked-set"].includes(e.target.id)) {
+  if (["search", "price", "alert-margin", "locked-set"].includes(e.target.id)) {
     if (e.key === "Escape" || (e.key === "Enter" && e.target.id !== "search")) { e.preventDefault(); e.target.blur(); }
     return;
   }
@@ -184,6 +195,9 @@ function init() {
   $("btn-same").addEventListener("click", addSame);
   $("lang").addEventListener("click", toggleLang);
   $("price").addEventListener("change", onPriceChange);
+  $("alert-margin").value = store.get("alertMargin", lastMargin);
+  onMarginChange();
+  $("alert-margin").addEventListener("change", onMarginChange);
   $("rare-alarm").checked = store.get("rareAlarm", false);
   $("rare-alarm").addEventListener("change", (e) => { store.set("rareAlarm", e.target.checked); e.target.blur(); });
   $("foil").addEventListener("change", (e) => { setFoil(e.target.checked); e.target.blur(); });
