@@ -11,7 +11,7 @@ Scanner webcam de cartes Magic (communes / unco, VO ou VF, foil ou non, NM) puis
 | Lecture du nom / numéro / code d'édition | [RapidOCR](https://github.com/RapidAI/RapidOCR) (PaddleOCR en ONNX, gère les accents) |
 | Identification | Recherche floue du nom VO **et** VF dans la base Scryfall (`all_cards`), puis choix de l'impression : symbole d'édition + cadre (comparaison avec les images Scryfall), numéro de collection, code d'édition (cadres récents), cohérence de langue |
 | Référentiel Cardmarket | Fichiers publics `products_singles` et `price_guide` (S3 Cardmarket) + slugs officiels des extensions lus sur cardmarket.com |
-| Mise en vente | Export CSV vers **TCG Powertools** (aucune publication directe) |
+| Mise en vente | Export CSV vers **TCG Powertools** |
 
 Une impression = la fiche anglaise Scryfall (qui porte le `cardmarket_id`). L'inventaire est une ligne par
 (impression, langue, état, prix, foil) avec une quantité : scanner deux fois la même carte incrémente la quantité.
@@ -63,9 +63,7 @@ Le prix tendance Cardmarket (foil si la case est cochée) est affiché ; si elle
 (champ « Alerte + », 0,50 € par défaut, mémorisé dans le navigateur), il passe en rouge et une alarme sonore retentit. « Prix tendance ↻ » retélécharge le guide des prix
 Cardmarket (mis à jour chaque nuit).
 
-## Exporter et mettre en vente
-
-La mise en vente se fait avec **TCG Powertools** : MagicScanner ne publie plus rien sur Cardmarket lui-même.
+## Export et lien Cardmarket
 
 **Export TCG Powertools** : le bouton « Export Powertools (N) » télécharge un CSV (format de `example-import.csv`)
 des cartes scannées depuis le dernier export, puis les marque comme exportées. Les cartes sans identifiant Cardmarket
@@ -74,7 +72,7 @@ sont laissées de côté (signalé dans la barre d'état). `/api/export?everythi
 **Lien Cardmarket** : le bouton « Lien Cardmarket » ouvre la fiche de la carte (en français, avec les filtres vendeurs/langues/état
 de `CM_BROWSE_QUERY` dans `config.py`) dans un nouvel onglet. Le slug est reconstruit (`/Magic/Products/Singles/<Extension>/<Carte>`) ;
 les slugs Cardmarket n'étant pas réguliers (`Akroma-s-Memorial`, `LimDuls-Cohort`, `Plains-V-1`), la variante la plus probable est
-proposée, et une URL connue dans la table `cm_urls` passe avant.
+proposée (une URL déjà connue dans la table `cm_urls` passe avant).
 
 **En ligne de commande** :
 
@@ -82,9 +80,6 @@ proposée, et une URL connue dans la table `cm_urls` passe avant.
 magicscanner status
 magicscanner export inventaire.csv
 ```
-
-Les anciennes tables `listings` (journal des prix des publications passées) et les colonnes `listed_quantity` / `list_error`
-restent dans la base, mais plus rien n'y écrit.
 
 ## Cartes « The List » et « Mystery Booster »
 
