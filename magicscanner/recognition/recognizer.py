@@ -83,17 +83,20 @@ class Recognizer:
                 return img, lines, titles, matches
         return attempt
 
-    def _locate_by_text(self, frame: np.ndarray, locked_set: str | None = None) -> np.ndarray | None:
-        """Dernier recours : lit toute l'image, repère une ligne qui est un nom de carte (bandeau du titre) et la ligne
-        du bas alignée dessous, et en déduit la position de la carte."""
+    def _locate_by_text(self, frame: np.ndarray, locked_set: str | None = None):
+        """Dernier recours : lit toute l'image, repère une ligne qui est un nom de carte (bandeau du titre) et déduit la
+        position de la carte d'une ligne du bas. Quelle ligne est « le bas » est incertain (cartes à bascule : nom
+        retourné, texte décalé) : on propose plusieurs positions, de la plus plausible à la moins plausible."""
         lines = self.ocr.read_pixels(frame)
         titles = [(m[0].score, -l.y, l) for l in lines
                   if len(l.text) >= 4 and (m := self._match_names([l.text], locked_set)) and m[0].score >= TITLE_FOUND]
         for _, _, title in sorted(titles, key=lambda t: t[:2], reverse=True):
-            below = [l for l in lines if l.y > title.y + 6 * title.height and abs(l.x - title.x) < 0.15 * (l.y - title.y)]
-            if below:
-                return ocr.card_from_title(title, max(below, key=lambda l: l.y))
-        return None
+            below = [l for l in lines if l.y > title.y + 6 * title.height]
+            aligned = [l for l in below if abs(l.x - title.x) < 0.15 * (l.y - title.y)]
+            others = [l for l in below if l not in aligned]
+            for footer in (sorted(aligned, key=lambda l: -l.y) + sorted(others, key=lambda l: -l.y))[:4]:
+                if (corners := ocr.card_from_title(title, footer)) is not None:
+                    yield corners
 
     def recognize(self, frame: np.ndarray, previous_set: str | None = None, foil: bool = False,
                   locked_set: str | None = None) -> Recognition:
@@ -104,10 +107,16 @@ class Recognizer:
             card, lines, titles, matches = self._read_card(card, locked_set)
         if card is None or not matches:
             # Contour introuvable ou mal choisi (bord noir dans l'ombre) : on retrouve la carte par son texte.
-            located = self._locate_by_text(frame, locked_set)
-            if located is not None:
-                card, lines, titles, matches = self._read_card(detect.warp(frame, located), locked_set)
-                corners = located
+            first = None
+            for located in self._locate_by_text(frame, locked_set):
+                attempt = self._read_card(detect.warp(frame, located), locked_set)
+                first = first or (attempt, located)
+                if attempt[3]:
+                    (card, lines, titles, matches), corners = attempt, located
+                    break
+            else:
+                if first is not None and card is None:
+                    (card, lines, titles, matches), corners = first
         if card is None:
             return Recognition(False, "Carte non détectée : vérifie le cadrage / l'éclairage")
         rec = Recognition(False, warped=card, corners=corners.tolist(), lines=[l.text for l in lines],

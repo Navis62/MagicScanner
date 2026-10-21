@@ -16,9 +16,9 @@ export function showStats(st) {
   if (!st) return;
   $("st-today").textContent = st.today;
   $("st-cards").textContent = st.cards;
-  $("st-tolist").textContent = st.to_list;
+  $("st-toexport").textContent = st.to_export;
   $("st-value").textContent = st.value.toFixed(2).replace(".", ",") + " €";
-  $("stat-tolist").classList.toggle("hot", st.to_list > 0);
+  $("stat-toexport").classList.toggle("hot", st.to_export > 0);
 }
 
 export function showScanDebug(warped, ocrLines, listSymbol = null) {
@@ -76,13 +76,11 @@ export function showCard(card, lang, confidence = null, needsReview = false) {
   $("trend-label").textContent = card.foil ? "Tendance foil" : "Prix tendance";
   showTrend(card);
   $("price-val").textContent = card.price != null ? card.price.toFixed(2).replace(".", ",") + " €" : "—";
-  const toList = card.quantity - (card.listed || 0);
-  $("qty").textContent = card.listed
-    ? `${card.quantity} (dont ${card.listed} déjà en vente sur Cardmarket — ${Math.max(toList, 0)} à publier)`
-    : `${card.quantity}`;
+  $("qty").textContent = `${card.quantity}`;
   const link = $("cm-url");
   link.href = card.cardmarket_url || "#";
-  link.textContent = card.cardmarket_url || "URL introuvable";
+  link.classList.toggle("disabled", !card.cardmarket_url);
+  link.textContent = card.cardmarket_url ? "Lien Cardmarket" : "URL introuvable";
 }
 
 export function showAlternatives(cards, title, onPick) {

@@ -1,7 +1,7 @@
 [project]
 name = "magicscanner"
 version = "0.1.0"
-description = "Scan webcam de cartes Magic et mise en vente sur Cardmarket"
+description = "Scan webcam de cartes Magic, stock et export vers TCG Powertools"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",

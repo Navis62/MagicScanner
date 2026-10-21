@@ -5,7 +5,7 @@ import logging
 import webbrowser
 
 from . import db, inventory
-from .config import CM_LOGIN_URL, ensure_dirs
+from .config import ensure_dirs
 
 
 def cmd_import(con, args) -> None:
@@ -18,12 +18,6 @@ def cmd_sync_expansions(con, args) -> None:
     expansions.sync(con)
 
 
-def cmd_login(con, args) -> None:
-    from .market import browser
-    browser.ensure_chrome(CM_LOGIN_URL)
-    print("Connecte-toi dans la fenêtre Chrome ; la session est conservée dans data/chrome-profile.")
-
-
 def cmd_serve(con, args) -> None:
     import uvicorn
     url = f"http://127.0.0.1:{args.port}"
@@ -33,31 +27,9 @@ def cmd_serve(con, args) -> None:
     uvicorn.run("magicscanner.web.app:app", host="127.0.0.1", port=args.port, log_level="warning")
 
 
-def cmd_list(con, args) -> None:
-    from .market import lister
-    lister.run(con, submit=args.submit, confirm=args.confirm, limit=args.limit)
-
-
 def cmd_status(con, args) -> None:
     st = inventory.stats(con)
-    print(f"{st['cards']} cartes ({st['lines']} lignes), {st['listed']} listées, {st['to_list']} à lister, "
-          f"valeur {st['value']:.2f} €")
-    for r in inventory.list_errors(con):
-        print(f"  erreur de listing : {r['list_error']} ({r['n']})")
-
-
-def cmd_unlist(con, args) -> None:
-    inventory.withdraw_listing(con, args.line_id, args.amount)
-    print(f"Retrait enregistré : {args.amount} exemplaire(s) de la ligne {args.line_id} ne sont plus comptés comme publiés.")
-
-
-def cmd_history(con, args) -> None:
-    rows = inventory.listings(con, args.limit)
-    for r in reversed(rows):
-        what = f"x{r['amount']} à {r['price']:.2f} €" if r["amount"] > 0 else f"RETRAIT de {-r['amount']}"
-        print(f"{r['listed_local']}  {r['name']} [{r['set_code'].upper()} #{r['collector_number']}] "
-              f"{r['lang'].upper()} {r['condition']}{' FOIL' if r['foil'] else ''}  {what}")
-    print(f"{len(rows)} mises en vente affichées")
+    print(f"{st['cards']} cartes ({st['lines']} lignes), {st['to_export']} à exporter, valeur {st['value']:.2f} €")
 
 
 def cmd_export(con, args) -> None:
@@ -65,10 +37,10 @@ def cmd_export(con, args) -> None:
     rows = inventory.export_rows(con)
     with open(args.path, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f, delimiter=";")
-        w.writerow(["nom", "edition", "code", "numero", "langue", "etat", "foil", "prix", "quantite", "listees", "id_cardmarket", "url"])
+        w.writerow(["nom", "edition", "code", "numero", "langue", "etat", "foil", "prix", "quantite", "id_cardmarket", "url"])
         for r in rows:
             w.writerow([r["name"], r["set_name"], r["set_code"], r["collector_number"], r["lang"], r["condition"],
-                        int(r["foil"]), r["price"], r["quantity"], r["listed_quantity"], r["cardmarket_id"],
+                        int(r["foil"]), r["price"], r["quantity"], r["cardmarket_id"],
                         urls.product_url(con, r["card_id"])])
     print(f"{len(rows)} lignes -> {args.path}")
 
@@ -82,30 +54,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--skip-download", action="store_true", help="réutilise le fichier Scryfall déjà téléchargé")
     p.set_defaults(func=cmd_import)
 
-    sub.add_parser("sync-expansions", help="récupère les slugs officiels des extensions (Chrome)").set_defaults(func=cmd_sync_expansions)
-    sub.add_parser("login", help="ouvre le Chrome dédié pour se connecter à Cardmarket").set_defaults(func=cmd_login)
+    sub.add_parser("sync-expansions", help="récupère les slugs officiels des extensions (Chrome) pour les liens Cardmarket").set_defaults(func=cmd_sync_expansions)
 
     p = sub.add_parser("serve", help="lance l'interface de scan")
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--no-browser", action="store_true", help="n'ouvre pas le navigateur")
     p.set_defaults(func=cmd_serve)
 
-    p = sub.add_parser("list", help="met en vente sur Cardmarket ce qui n'est pas encore listé")
-    p.add_argument("--submit", action="store_true", help="publie réellement (sinon dry-run)")
-    p.add_argument("--confirm", action="store_true", help="demande confirmation pour chaque carte")
-    p.add_argument("--limit", type=int)
-    p.set_defaults(func=cmd_list)
-
     sub.add_parser("status", help="résumé de l'inventaire").set_defaults(func=cmd_status)
-
-    p = sub.add_parser("unlist", help="enregistre qu'une annonce a été retirée à la main sur Cardmarket")
-    p.add_argument("line_id", type=int, help="numéro de la ligne d'inventaire (colonne id)")
-    p.add_argument("--amount", type=int, default=1)
-    p.set_defaults(func=cmd_unlist)
-
-    p = sub.add_parser("history", help="journal des mises en vente (carte, prix, quantité, date)")
-    p.add_argument("--limit", type=int, default=50)
-    p.set_defaults(func=cmd_history)
 
     p = sub.add_parser("export", help="exporte l'inventaire en CSV")
     p.add_argument("path", nargs="?", default="inventaire.csv")

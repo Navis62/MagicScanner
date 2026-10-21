@@ -2,13 +2,13 @@
 
 Les slugs Cardmarket ne suivent pas une règle unique (« Akroma's Memorial » -> Akroma-s-Memorial,
 « Lim-Dûl's Cohort » -> LimDuls-Cohort, « Plains (V.1) » -> Plains-V-1) : on génère des variantes par ordre
-de probabilité, le lister ouvre chacune et garde celle dont le formulaire porte le bon idProduct (table cm_urls).
+de probabilité ; la première est proposée (une URL déjà validée dans la table cm_urls passe avant).
 """
 import re
 import sqlite3
 import unicodedata
 
-from ..config import CM_SINGLES_URL
+from ..config import CM_BROWSE_QUERY, CM_SINGLES_URL
 
 
 def _ascii(s: str) -> str:
@@ -60,11 +60,6 @@ def _product(con: sqlite3.Connection, card_id: str) -> sqlite3.Row | None:
     ).fetchone()
 
 
-def product_name(con: sqlite3.Connection, card_id: str) -> str | None:
-    row = _product(con, card_id)
-    return row["name"] if row else None
-
-
 def candidate_urls(con: sqlite3.Connection, card_id: str) -> list[str]:
     """URL déjà validée en premier, puis les variantes de slug."""
     row = _product(con, card_id)
@@ -80,6 +75,9 @@ def product_url(con: sqlite3.Connection, card_id: str) -> str | None:
     return urls[0] if urls else None
 
 
-def remember_url(con: sqlite3.Connection, id_product: int, url: str) -> None:
-    con.execute("INSERT OR REPLACE INTO cm_urls VALUES (?,?)", (id_product, url))
-    con.commit()
+def browse_url(url: str | None) -> str | None:
+    """Même page produit, en français et avec les filtres d'achat habituels (pays vendeurs, langues, état)."""
+    if not url:
+        return None
+    return f"{url.replace('/en/', '/fr/', 1)}?{CM_BROWSE_QUERY}"
+

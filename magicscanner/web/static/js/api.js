@@ -35,8 +35,4 @@ export const api = {
     return { blob: await r.blob(), lines: +r.headers.get("X-Export-Lines"), skipped: +r.headers.get("X-Export-Skipped") };
   },
   refreshPrices: () => request("/api/prices/refresh", { method: "POST" }),
-  publishStatus: () => request("/api/publish"),
-  publish: (options = {}) => postJson("/api/publish", options),
-  publishReset: () => request("/api/publish/reset", { method: "POST" }),
-  publishStop: () => request("/api/publish/stop", { method: "POST" }),
 };

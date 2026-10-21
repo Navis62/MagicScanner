@@ -1,6 +1,6 @@
 # MagicScanner
 
-Scanner webcam de cartes Magic (communes / unco, VO ou VF, foil ou non, NM) et mise en vente sur Cardmarket (0,18 € par défaut, prix modifiable au scan).
+Scanner webcam de cartes Magic (communes / unco, VO ou VF, foil ou non, NM) puis export du stock vers TCG Powertools, qui met les cartes en vente sur Cardmarket (0,18 € par défaut, prix modifiable au scan).
 
 ## Principe
 
@@ -11,7 +11,7 @@ Scanner webcam de cartes Magic (communes / unco, VO ou VF, foil ou non, NM) et m
 | Lecture du nom / numéro / code d'édition | [RapidOCR](https://github.com/RapidAI/RapidOCR) (PaddleOCR en ONNX, gère les accents) |
 | Identification | Recherche floue du nom VO **et** VF dans la base Scryfall (`all_cards`), puis choix de l'impression : symbole d'édition + cadre (comparaison avec les images Scryfall), numéro de collection, code d'édition (cadres récents), cohérence de langue |
 | Référentiel Cardmarket | Fichiers publics `products_singles` et `price_guide` (S3 Cardmarket) + slugs officiels des extensions lus sur cardmarket.com |
-| Mise en vente | Playwright rattaché en CDP à un **vrai Chrome** (Cloudflare bloque un navigateur lancé par Playwright) |
+| Mise en vente | Export CSV vers **TCG Powertools** (aucune publication directe) |
 
 Une impression = la fiche anglaise Scryfall (qui porte le `cardmarket_id`). L'inventaire est une ligne par
 (impression, langue, état, prix, foil) avec une quantité : scanner deux fois la même carte incrémente la quantité.
@@ -23,8 +23,7 @@ python -m venv .venv
 .\.venv\Scripts\activate
 pip install -e ".[dev]"
 magicscanner import            # ~400 Mo Scryfall + catalogue Cardmarket (quelques minutes)
-magicscanner login             # ouvre Chrome (profil data/chrome-profile) : se connecter à Cardmarket
-magicscanner sync-expansions   # slugs officiels des extensions
+magicscanner sync-expansions   # slugs officiels des extensions (ouvre Chrome, sert aux liens Cardmarket)
 ```
 
 Relancer `import` de temps en temps pour les nouvelles éditions (puis `sync-expansions` si une extension est sortie).
@@ -64,49 +63,28 @@ Le prix tendance Cardmarket (foil si la case est cochée) est affiché ; si elle
 (champ « Alerte + », 0,50 € par défaut, mémorisé dans le navigateur), il passe en rouge et une alarme sonore retentit. « Prix tendance ↻ » retélécharge le guide des prix
 Cardmarket (mis à jour chaque nuit).
 
-## Mettre en vente
+## Exporter et mettre en vente
 
-**Depuis l'interface** : le bouton « Publier N cartes sur Cardmarket » (en haut) met en vente tout ce qui ne l'est
-pas encore, après confirmation. Une barre de progression indique les exemplaires publiés et la carte en cours ;
-un rapport s'affiche à la fin (cartes publiées, erreurs) et « Arrêter » interrompt proprement après la carte en cours. Tu peux continuer
-à scanner pendant la publication : les nouvelles cartes seront publiées au clic suivant.
-
-**Exemplaires déjà publiés** : le stock distingue « en stock » et « déjà en vente ». Scanner un 2e exemplaire d'une
-carte déjà publiée n'annonce que ce 2e exemplaire (l'écran de scan indique « dont 1 déjà en vente — 1 à publier »).
-Un exemplaire déjà publié ne peut plus être annulé ni corrigé depuis l'outil : il faut retirer l'annonce sur Cardmarket.
+La mise en vente se fait avec **TCG Powertools** : MagicScanner ne publie plus rien sur Cardmarket lui-même.
 
 **Export TCG Powertools** : le bouton « Export Powertools (N) » télécharge un CSV (format de `example-import.csv`)
 des cartes scannées depuis le dernier export, puis les marque comme exportées. Les cartes sans identifiant Cardmarket
 sont laissées de côté (signalé dans la barre d'état). `/api/export?everything=true` réexporte tout le stock sans rien marquer.
-Powertools les met ensuite en vente sur Cardmarket : « Déjà publié » marque alors tout le stock comme déjà en vente
-(le compteur « À publier » retombe à 0 et le bot ne les republie pas ; chaque ligne est inscrite au journal).
 
-**Journal des prix** : chaque publication est inscrite dans la table `listings` (carte, langue, état, finition, **prix auquel
-elle a été faite**, quantité, URL, date) et n'est jamais modifiée : l'historique garde le prix d'origine de chaque annonce
-même si on réétiquette le stock plus tard.
-
-**Sécurité** : une annonce n'est comptée comme publiée qu'après le bandeau de confirmation vert de Cardmarket. Si le
-site ne confirme ni n'affiche d'erreur, tout s'arrête (capture dans `data/publish-debug/`) plutôt que de risquer des
-doublons. Si tu n'es pas connecté à Cardmarket, rien n'est tenté.
+**Lien Cardmarket** : le bouton « Lien Cardmarket » ouvre la fiche de la carte (en français, avec les filtres vendeurs/langues/état
+de `CM_BROWSE_QUERY` dans `config.py`) dans un nouvel onglet. Le slug est reconstruit (`/Magic/Products/Singles/<Extension>/<Carte>`) ;
+les slugs Cardmarket n'étant pas réguliers (`Akroma-s-Memorial`, `LimDuls-Cohort`, `Plains-V-1`), la variante la plus probable est
+proposée, et une URL connue dans la table `cm_urls` passe avant.
 
 **En ligne de commande** :
 
 ```powershell
-magicscanner list                        # dry-run : ouvre chaque page, remplit, ne publie pas
-magicscanner list --submit --confirm --limit 5   # premiers essais : confirmation carte par carte
-magicscanner list --submit               # tout le reste
 magicscanner status
-magicscanner history                          # journal des mises en vente, avec le prix de chacune
-magicscanner unlist 49                        # note qu'une annonce (ligne 49) a été retirée à la main sur Cardmarket
 magicscanner export inventaire.csv
 ```
 
-L'URL est reconstruite (`/en/Magic/Products/Singles/<Extension>/<Carte>`) puis **vérifiée** : le formulaire de
-vente contient l'idProduct, qui doit être égal au `cardmarket_id` Scryfall. Les slugs Cardmarket n'étant pas
-réguliers (`Akroma-s-Memorial`, `LimDuls-Cohort`, `Plains-V-1`), plusieurs variantes sont essayées, puis une
-recherche dans l'extension ; l'URL validée est mémorisée (table `cm_urls`). Un essai raté fait afficher à Cardmarket
-un bandeau rouge « invalid product » : c'est normal, la variante suivante est essayée. Seule la quantité pas encore
-listée est publiée (`listed_quantity`), on peut donc relancer sans doublon.
+Les anciennes tables `listings` (journal des prix des publications passées) et les colonnes `listed_quantity` / `list_error`
+restent dans la base, mais plus rien n'y écrit.
 
 ## Cartes « The List » et « Mystery Booster »
 
@@ -127,7 +105,7 @@ de choisir l'autre impression.
 Scryfall ne donne pas l'identifiant Cardmarket d'environ 1 carte `plst` sur 5. `magicscanner import` retrouve celui de
 583 d'entre elles par le nom, uniquement quand c'est sans équivoque (un seul produit de ce nom dans The List / Mystery
 Booster / Mystery Booster 2, pas déjà pris, une seule carte concernée). Les ~570 autres sont reconnues mais ne sont pas
-publiées automatiquement (erreur « pas d'identifiant Cardmarket » dans le rapport).
+exportées (comptées comme « sans identifiant Cardmarket » dans la barre d'état).
 
 Limite : l'étincelle n'a été validée que sur des images simulées, pas encore sur une vraie carte.
 
@@ -135,10 +113,10 @@ Limite : l'étincelle n'a été validée que sur des images simulées, pas encor
 
 ```
 magicscanner/
-  cli.py              commandes (import, login, sync-expansions, serve, list, status, unlist, history, export)
+  cli.py              commandes (import, sync-expansions, serve, status, export)
   config.py           chemins, prix, Chrome, URLs des sources (surcharge MS_*)
   db.py               schéma SQLite et connexion
-  inventory.py        stock : scans, annulation, correction, progression du listing
+  inventory.py        stock : scans, annulation, correction, suivi des exports
   powertools.py       export CSV pour TCG Powertools
   catalog/            données de référence
     scryfall.py         import des éditions et des cartes (bulk all_cards, VO + VF)
@@ -155,14 +133,12 @@ magicscanner/
     scoring.py          score d'une impression candidate (poids réglables en tête de fichier)
     recognizer.py       pipeline complet (contours -> OCR ; à défaut, carte localisée par son texte)
   market/             site cardmarket.com
-    urls.py             variantes d'URL produit, URLs validées
-    browser.py          Chrome réel piloté en CDP
+    urls.py             variantes d'URL produit, lien de navigation filtré
+    browser.py          Chrome réel piloté en CDP (lecture des slugs d'extensions)
     expansions.py       liste officielle des extensions
-    lister.py           mise en vente
   web/                interface de scan
     app.py              API FastAPI
-    publisher.py        publication lancée depuis l'interface (tâche de fond, progression)
-    static/             index.html, style.css, js/ (main, camera, preview, publish, tools, view, api, sound, dom)
+    static/             index.html, style.css, js/ (main, camera, preview, tools, view, api, sound, dom)
 tests/                pytest ; tests/fixtures contient de vraies photos webcam (régressions de détection)
 ```
 
@@ -182,8 +158,9 @@ pytest -m "not integration"   # sans la base importée
 
 - Rééditions à illustration et cadre identiques : départagées surtout par le symbole d'édition et le numéro
   de collection ; vérifier visuellement et corriger avec `1`–`9` si besoin.
-- Cartes split / aventure / à faces multiples : le nom lu est celui de la première face.
+- Cartes split / aventure / à faces multiples (dont les cartes à bascule de Kamigawa) : le nom lu est celui de la première face.
+- Certaines cartes n'ont pas de fiche française chez Scryfall (ex. les cartes à bascule de Champions of Kamigawa) : leur nom VF est alors absent de la base et la carte risque d'être confondue avec un nom voisin (« Adepte de sang » lu « Orateur de sang »). Les noms connus sont ajoutés à la main dans `MISSING_FR_NAMES` ([lookup.py](magicscanner/catalog/lookup.py)).
 - Les images de référence Scryfall sont mises en cache en 366 px (~46 Ko) : suffisant pour départager les éditions.
 - Vérifier le numéro de collection quand le choix est ambigu : le pied de carte est souvent illisible pour l'OCR.
-- La localisation par le texte (carte à bord noir perdu dans l'ombre) exige un titre et une ligne du bas lisibles, et une carte à peu près droite ; elle ajoute ~2,5 s au scan concerné.
+- La localisation par le texte (carte à bord noir perdu dans l'ombre) exige un titre et une ligne du bas lisibles, et une carte à peu près droite ; elle ajoute ~2,5 s au scan concerné. Comme la ligne du bas est incertaine (cartes à bascule : nom retourné), plusieurs positions de carte sont essayées jusqu'à ce que le nom soit reconnu.
 - Les images de scans ratés sont gardées (20 dernières) dans `data/scans/failed/` pour diagnostic.

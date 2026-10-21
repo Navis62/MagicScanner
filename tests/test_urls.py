@@ -35,7 +35,7 @@ def test_candidate_urls_versions_follow_product_ids(con):
 
 
 def test_remembered_url_comes_first(con):
-    urls.remember_url(con, 252482, f"{BASE}/Dark-Ascension/Gravecrawler-custom")
+    con.execute("INSERT INTO cm_urls VALUES (?,?)", (252482, f"{BASE}/Dark-Ascension/Gravecrawler-custom"))
     assert urls.candidate_urls(con, "grave-dka")[0].endswith("Gravecrawler-custom")
 
 

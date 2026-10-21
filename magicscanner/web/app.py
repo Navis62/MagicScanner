@@ -26,7 +26,6 @@ from ..config import (
     ensure_dirs,
 )
 from ..recognition import Candidate, Recognizer, detect
-from .publisher import PublishJob
 
 STATIC = Path(__file__).parent / "static"
 MAX_ALTERNATIVES = 11
@@ -42,7 +41,6 @@ class Services:
 
 
 svc: Services
-publisher = PublishJob()
 
 
 @asynccontextmanager
@@ -78,19 +76,14 @@ class CardChoice(BaseModel):
     price: float | None = Field(None, ge=MIN_PRICE)   # None : prix inchangé (correction) ou prix par défaut
 
 
-class PublishRequest(BaseModel):
-    limit: int | None = None   # n'en publier que quelques-unes (premiers essais)
-    dry_run: bool = False      # remplit les formulaires sans rien publier
-
-
 # --- Helpers ------------------------------------------------------------------------------------------------
 
 def _card(card_id: str, lang: str | None = None, candidate: Candidate | None = None, foil: bool = False,
           price: float = DEFAULT_PRICE) -> dict:
-    """Fiche pour l'UI : référentiel + stock (quantité, dont déjà publiées) (+ détail du score si candidate)."""
+    """Fiche pour l'UI : référentiel + stock (quantité) (+ détail du score si candidate)."""
     info = svc.catalog.card_info(card_id, lang, foil)
     info["foil"], info["price"] = foil, price
-    info["quantity"], info["listed"] = inventory.quantity(svc.con, card_id, lang, foil, price) if lang else (0, 0)
+    info["quantity"] = inventory.quantity(svc.con, card_id, lang, foil, price) if lang else 0
     if candidate:
         info.update(asdict(candidate))
     return info
@@ -195,10 +188,7 @@ def undo_last():
         if not last:
             raise HTTPException(404, "Aucun scan à annuler")
         scan = last[0]
-        try:
-            inventory.undo_scan(svc.con, scan["id"])
-        except inventory.AlreadyListed as e:
-            raise HTTPException(409, str(e)) from None
+        inventory.undo_scan(svc.con, scan["id"])
         card = _card(scan["card_id"], scan["lang"], foil=bool(scan["foil"]), price=scan["price"])
         return {"ok": True, "card": card, "lang": scan["lang"], "stats": inventory.stats(svc.con)}
 
@@ -206,11 +196,7 @@ def undo_last():
 @app.post("/api/scans/{scan_id}/reassign")
 def reassign(scan_id: int, body: CardChoice):
     with svc.lock:
-        try:
-            moved = inventory.reassign_scan(svc.con, scan_id, body.card_id, body.lang, body.foil, body.price)
-        except inventory.AlreadyListed as e:
-            raise HTTPException(409, str(e)) from None
-        if not moved:
+        if not inventory.reassign_scan(svc.con, scan_id, body.card_id, body.lang, body.foil, body.price):
             raise HTTPException(404, "scan introuvable ou annulé")
         line = inventory.scan_line(svc.con, scan_id)
         card = _card(body.card_id, body.lang, foil=bool(line["foil"]), price=line["price"])
@@ -274,37 +260,3 @@ def export_powertools(everything: bool = False):
         "Access-Control-Expose-Headers": "X-Export-Lines, X-Export-Skipped",
     })
 
-
-# --- Publication Cardmarket ----------------------------------------------------------------------------------
-
-@app.get("/api/publish")
-def publish_status():
-    return publisher.snapshot()
-
-
-@app.post("/api/publish")
-def publish(body: PublishRequest | None = None):
-    """Met en vente sur Cardmarket les exemplaires pas encore publiés (la différence stock - publiées)."""
-    body = body or PublishRequest()
-    with svc.lock:
-        if inventory.stats(svc.con)["to_list"] == 0:
-            raise HTTPException(400, "Rien à publier : tout le stock est déjà en vente.")
-    if not publisher.start(submit=not body.dry_run, limit=body.limit):
-        raise HTTPException(409, "Une publication est déjà en cours.")
-    return publisher.snapshot()
-
-
-@app.post("/api/publish/reset")
-def publish_reset():
-    """Remet le compteur « à publier » à zéro : tout le stock est considéré comme déjà en vente."""
-    if publisher.snapshot()["state"] == "running":
-        raise HTTPException(409, "Une publication est en cours.")
-    with svc.lock:
-        marked = inventory.mark_all_listed(svc.con)
-        return {"marked": marked, "stats": inventory.stats(svc.con)}
-
-
-@app.post("/api/publish/stop")
-def publish_stop():
-    publisher.stop()
-    return publisher.snapshot()

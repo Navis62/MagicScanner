@@ -25,14 +25,11 @@
   <div class="stats">
     <div class="stat"><span>Aujourd'hui</span><b id="st-today">0</b></div>
     <div class="stat"><span>En stock</span><b id="st-cards">0</b></div>
-    <div class="stat" id="stat-tolist"><span>À publier</span><b id="st-tolist">0</b></div>
+    <div class="stat" id="stat-toexport"><span>À exporter</span><b id="st-toexport">0</b></div>
     <div class="stat"><span>Valeur</span><b id="st-value">0 €</b></div>
   </div>
 
-  <div class="publish">
-    <button id="btn-publish" class="primary" disabled>Rien à publier</button>
-    <button id="btn-publish-reset" class="ghost" disabled title="Considère tout le stock comme déjà en vente (publié via TCG Powertools par exemple) : le compteur « À publier » repasse à 0">Déjà publié</button>
-    <button id="btn-publish-stop" class="danger" hidden>Arrêter</button>
+  <div class="tools">
     <button id="btn-prices" class="ghost" title="Retélécharge les prix tendance Cardmarket (mis à jour chaque nuit)">Prix tendance ↻</button>
     <button id="btn-export" class="ghost" disabled title="Télécharge un CSV des cartes pas encore exportées, à importer dans TCG Powertools">Export Powertools</button>
   </div>
@@ -49,14 +46,6 @@
   <select id="camera" title="Caméra"></select>
   </div>
 </header>
-
-<div id="publish-report" class="report" hidden>
-  <div class="report-head">
-    <b id="report-title"></b>
-    <button id="report-close" title="Fermer">✕</button>
-  </div>
-  <div id="report-body"></div>
-</div>
 
 <div class="search">
   <input id="search" placeholder="Recherche manuelle — nom VO ou VF" autocomplete="off">
@@ -122,7 +111,7 @@
         <dt id="trend-label">Prix tendance</dt><dd id="trend">—</dd>
         <dt>Prix de vente</dt><dd id="price-val">—</dd>
         <dt>En stock</dt><dd id="qty">—</dd>
-        <dt>Cardmarket</dt><dd><a id="cm-url" target="_blank" rel="noopener"></a></dd>
+        <dt>Cardmarket</dt><dd><a id="cm-url" class="link-btn" target="_blank" rel="noopener">Lien Cardmarket</a></dd>
       </dl>
       <div class="actions">
         <button id="btn-next" class="primary"><kbd>Espace</kbd> Suivante</button>

@@ -14,9 +14,9 @@ CREATE TABLE IF NOT EXISTS {name} (
     price REAL NOT NULL,
     foil INTEGER NOT NULL DEFAULT 0,
     quantity INTEGER NOT NULL DEFAULT 0,
-    listed_quantity INTEGER NOT NULL DEFAULT 0,
+    listed_quantity INTEGER NOT NULL DEFAULT 0,      -- hérité de l'ancienne publication directe : plus utilisé
     exported_quantity INTEGER NOT NULL DEFAULT 0,   -- déjà passés dans un export CSV TCG Powertools
-    list_error TEXT,
+    list_error TEXT,                                 -- idem
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (card_id, lang, condition, price, foil)
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS cm_expansions (
     sample_code TEXT
 );
 
--- URLs produit validées sur Cardmarket (cache du lister).
+-- URLs produit validées sur Cardmarket (héritage de l'ancien lister : lues en priorité pour le lien Cardmarket).
 CREATE TABLE IF NOT EXISTS cm_urls (
     id_product INTEGER PRIMARY KEY,
     url TEXT NOT NULL
@@ -110,8 +110,7 @@ CREATE TABLE IF NOT EXISTS names (
 
 {inventory}
 
--- Journal des mises en vente : une ligne par publication, avec le prix auquel elle a été faite.
--- Jamais modifié : il garde l'historique même si les prix du stock changent plus tard.
+-- Ancien journal des publications directes (carte, prix, quantité, date) : conservé comme historique, plus alimenté.
 CREATE TABLE IF NOT EXISTS listings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     inventory_id INTEGER NOT NULL REFERENCES inventory(id),
@@ -148,7 +147,6 @@ def connect(path: Path | str = DB_PATH) -> sqlite3.Connection:
     con.execute("PRAGMA foreign_keys=ON")
     con.executescript(SCHEMA.replace("{inventory}", INVENTORY_TABLE.format(name="inventory")))
     _migrate(con)
-    backfill_listings(con)
     con.commit()
     return con
 
@@ -202,16 +200,3 @@ def _add_foil_to_inventory(con: sqlite3.Connection) -> None:
     )
     con.execute("PRAGMA foreign_keys=ON")
 
-
-def backfill_listings(con: sqlite3.Connection) -> None:
-    """Rattrape les publications faites avant l'existence du journal : pour chaque ligne dont le nombre publié
-    dépasse celui du journal, ajoute la différence au prix de la ligne. Sans effet quand tout est à jour."""
-    con.execute(
-        """INSERT INTO listings (inventory_id, card_id, lang, condition, price, foil, amount, url, listed_at)
-           SELECT i.id, i.card_id, i.lang, i.condition, i.price, i.foil,
-                  i.listed_quantity - COALESCE((SELECT SUM(l.amount) FROM listings l WHERE l.inventory_id = i.id), 0),
-                  (SELECT u.url FROM cm_urls u JOIN cards c ON c.cardmarket_id = u.id_product WHERE c.id = i.card_id),
-                  i.updated_at
-           FROM inventory i
-           WHERE i.listed_quantity > COALESCE((SELECT SUM(l.amount) FROM listings l WHERE l.inventory_id = i.id), 0)"""
-    )

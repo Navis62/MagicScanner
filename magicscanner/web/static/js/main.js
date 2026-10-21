@@ -4,7 +4,6 @@ import { grabFrame, initCamera, isReady } from "./camera.js";
 import { $, store } from "./dom.js";
 import { initEdition, lockedSet } from "./edition.js";
 import { frameOnCard, initPreview, isDefaultZoom } from "./preview.js";
-import { initPublish, updateToList } from "./publish.js";
 import { sound } from "./sound.js";
 import { initTools, updateToExport } from "./tools.js";
 import * as view from "./view.js";
@@ -21,7 +20,6 @@ const safe = (fn) => (...args) => fn(...args).catch((e) => view.setStatus("Erreu
 async function refresh(stats) {
   stats ??= await api.stats();
   view.showStats(stats);
-  updateToList(stats);
   updateToExport(stats);
   view.showRecent(await api.recent());
 }
@@ -174,7 +172,6 @@ const search = safe(async (q) => {
 });
 
 function onKey(e) {
-  if (document.querySelector("dialog[open]")) return;   // une boîte de dialogue gère ses propres touches
   if (["search", "price", "alert-margin", "locked-set"].includes(e.target.id)) {
     if (e.key === "Escape" || (e.key === "Enter" && e.target.id !== "search")) { e.preventDefault(); e.target.blur(); }
     return;
@@ -209,7 +206,6 @@ function init() {
   // Après un clic, le focus revient à la page : Espace scanne au lieu de re-cliquer le bouton.
   document.addEventListener("click", (e) => e.target.closest("button")?.blur());
   initPreview();
-  initPublish(() => refresh());
   initTools(() => refresh());
   initEdition().catch((e) => view.setStatus("Éditions indisponibles : " + e.message, "err"));
   initCamera().catch((e) => view.setStatus("Caméra indisponible : " + e.message, "err"));

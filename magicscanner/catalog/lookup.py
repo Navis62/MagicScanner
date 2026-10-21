@@ -20,6 +20,10 @@ PRINTING_SQL = """
 """
 
 
+# Nom anglais (première face) -> nom français imprimé, pour les cartes sans fiche française chez Scryfall.
+MISSING_FR_NAMES = {"Initiate of Blood": "Adepte de sang"}
+
+
 def normalize(s: str) -> str:
     """Minuscules, sans accents ni ponctuation : robuste aux approximations de l'OCR."""
     s = unicodedata.normalize("NFKD", s.lower())
@@ -49,8 +53,18 @@ class Catalog:
         rows = con.execute("SELECT oracle_id, lang, name FROM names").fetchall()
         self._names = [normalize(r["name"]) for r in rows]
         self._meta = [(r["oracle_id"], r["lang"], r["name"]) for r in rows]
+        self._add_missing_names()
         self.fr_sets = {r[0] for r in con.execute("SELECT DISTINCT set_code FROM localized WHERE lang='fr'")}
         self._by_set: dict[str, tuple[list[str], list[tuple]]] = {}
+
+    def _add_missing_names(self) -> None:
+        """Noms VF absents de Scryfall (aucune fiche française pour la carte) : sans eux, la carte est confondue avec
+        le nom le plus proche (« Adepte de sang » lu comme « Orateur de sang »)."""
+        by_en = {m[2]: m[0] for m in self._meta if m[1] == "en"}
+        for en_name, fr_name in MISSING_FR_NAMES.items():
+            if oracle_id := by_en.get(en_name):
+                self._names.append(normalize(fr_name))
+                self._meta.append((oracle_id, "fr", fr_name))
 
     def _names_in_set(self, set_code: str) -> tuple[list[str], list[tuple]]:
         """Noms (toutes langues) des cartes imprimées dans une édition : la liste de recherche quand l'édition est fixée."""
@@ -123,6 +137,6 @@ class Catalog:
             "list_label": list_label(expansion["name"] if expansion else None) if c["set_code"] == "plst" else None,
             "cm_expansion": expansion["name"] if expansion else None,
             "cardmarket_id": c["cardmarket_id"],
-            "cardmarket_url": urls.product_url(self.con, card_id),
+            "cardmarket_url": urls.browse_url(urls.product_url(self.con, card_id)),
             "trend": trend,
         }

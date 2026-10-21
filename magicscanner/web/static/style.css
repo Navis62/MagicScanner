@@ -111,28 +111,13 @@ button.ghost:hover:not(:disabled) { color: var(--text); background: var(--panel-
 .stat.hot { border-color: rgba(233, 185, 73, .45); background: linear-gradient(180deg, rgba(233, 185, 73, .10), var(--panel)); }
 .stat.hot b { color: var(--gold-hi); }
 
-.publish { display: flex; gap: 8px; }
+.tools { display: flex; gap: 8px; }
 /* 2e ligne de l'en-tête : réglages des prochains scans */
 .controls { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
 .controls label { white-space: nowrap; }
 .controls select#camera { margin-left: auto; }
-.publish button { padding: 10px 18px; white-space: nowrap; }
+.tools button { padding: 10px 18px; white-space: nowrap; }
 select#camera { max-width: 220px; text-overflow: ellipsis; }
-
-/* ───────── Rapport de publication ───────── */
-.report {
-  margin: 16px 24px 0; padding: 12px 18px;
-  background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--muted);
-  border-radius: 12px;
-}
-.report.busy { border-left-color: var(--violet); }
-.report.ok { border-left-color: var(--ok); }
-.report.warn { border-left-color: var(--warn); }
-.report-head { display: flex; justify-content: space-between; align-items: center; }
-.report-head button { padding: 0 8px; background: none; border: none; color: var(--muted); }
-.report ul { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
-.report p { margin: 8px 0 0; color: var(--muted); }
-.report .stopped { color: var(--warn); font-weight: 600; }
 
 /* ───────── Mise en page ───────── */
 main {
@@ -266,7 +251,10 @@ dd { margin: 0; font-size: 15px; min-width: 0; font-variant-numeric: tabular-num
 .set-icon { width: 22px; height: 22px; vertical-align: middle; margin-right: 4px; filter: invert(1) opacity(.9); }
 .set-icon:not([src]), .set-icon[src=""] { display: none; }
 #trend.alert { color: var(--warn); font-weight: 700; }
-#cm-url { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+#cm-url.link-btn { display: inline-block; padding: 5px 12px; font-size: 13px; font-weight: 500; text-decoration: none;
+  color: var(--text); background: var(--panel-2); border: 1px solid var(--border, currentColor); border-radius: 8px; }
+#cm-url.link-btn:hover { filter: brightness(1.15); }
+#cm-url.disabled { pointer-events: none; opacity: .5; }
 
 .actions { display: flex; gap: 10px; }
 .actions button { display: inline-flex; align-items: center; gap: 10px; padding: 12px 20px; font-size: 15px; }
@@ -342,9 +330,6 @@ main > .panel { min-width: 0; }
 .chip.list.yes { color: var(--gold-hi); border-color: rgba(233, 185, 73, .55); background: rgba(233, 185, 73, .12); }
 .chip.list.maybe { color: var(--warn); border-color: rgba(245, 165, 36, .45); }
 .chip.list.no { color: var(--faint); }
-.report .bar { margin-top: 10px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.1); overflow: hidden; }
-.report .bar i { display: block; height: 100%; background: var(--violet); transition: width .4s; }
-
 /* Foil, prix de vente */
 .foil-toggle, .price-field, .set-field { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
 .set-field input { width: 190px; }
@@ -358,18 +343,3 @@ main > .panel { min-width: 0; }
 .price-field input { width: 72px; text-align: right; appearance: textfield; -moz-appearance: textfield; }
 .price-field input::-webkit-inner-spin-button, .price-field input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 button.ghost.active { color: var(--ok); }
-
-/* ───────── Boîte de confirmation ───────── */
-dialog.modal {
-  width: min(440px, calc(100vw - 32px)); padding: 22px 24px; color: var(--text);
-  background: linear-gradient(180deg, rgba(255, 255, 255, .03), transparent 40%), var(--panel);
-  border: 1px solid var(--line); border-radius: var(--radius);
-  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, .9), 0 0 60px -20px rgba(139, 124, 246, .35);
-  animation: pop .25s cubic-bezier(.2, .9, .3, 1.2);
-}
-dialog.modal::backdrop { background: rgba(5, 7, 11, .7); backdrop-filter: blur(4px); }
-.modal-title { margin-bottom: 12px; font: 700 18px var(--display); letter-spacing: .02em; color: var(--gold-hi); }
-dialog.modal p { margin-top: 10px; color: var(--muted); line-height: 1.55; }
-dialog.modal p:first-of-type { color: var(--text); }
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
-.modal-actions button { padding: 9px 18px; }
