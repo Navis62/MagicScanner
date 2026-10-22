@@ -21,7 +21,27 @@ PRINTING_SQL = """
 
 
 # Nom anglais (première face) -> nom français imprimé, pour les cartes sans fiche française chez Scryfall.
-MISSING_FR_NAMES = {"Initiate of Blood": "Adepte de sang"}
+# Cartes à bascule de Kamigawa (nom VF de la face avant, d'après les listes VF de jp.queill.free.fr).
+MISSING_FR_NAMES = {
+    "Bushi Tenderfoot": "Bushi pied-tendre",
+    "Jushi Apprentice": "Apprenti Jushi",
+    "Student of Elements": "Étudiant des éléments",
+    "Nezumi Shortfang": "Nezumi rasdecroc",
+    "Akki Lavarunner": "Akki coureur des laves",
+    "Initiate of Blood": "Adepte de sang",
+    "Budoka Gardener": "Jardinier budoka",
+    "Orochi Eggwatcher": "Couveuse orochi",
+    "Faithful Squire": "Écuyer fidèle",
+    "Callow Jushi": "Jushi novice",
+    "Hired Muscle": "Gros bras",
+    "Cunning Bandit": "Bandit rusé",
+    "Budoka Pupil": "Élève budoka",
+    "Rune-Tail, Kitsune Ascendant": "Queue-de-runes, ascendant kitsune",
+    "Erayo, Soratami Ascendant": "Erayo, ascendante soratami",
+    "Kuon, Ogre Ascendant": "Kuon, ascendant ogre",
+    "Homura, Human Ascendant": "Homura, ascendant humain",
+    "Sasaya, Orochi Ascendant": "Sasaya, ascendant orochi",
+}
 
 
 def normalize(s: str) -> str:

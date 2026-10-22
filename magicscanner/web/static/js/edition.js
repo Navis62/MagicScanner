@@ -8,6 +8,7 @@ const byLabel = new Map();   // « Nom — CODE » -> code
 const names = new Map();     // code -> nom
 let locked = "";
 
+const norm = (s) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 const label = (s) => `${s.name} — ${s.code.toUpperCase()}`;
 
 /** Code de l'édition fixée, "" pour toutes. */
@@ -42,5 +43,15 @@ export async function initEdition() {
   lock(store.get(KEY, ""));
   $("locked-set").addEventListener("change", onChange);
   $("locked-set").addEventListener("focus", (e) => e.target.select());
+  $("locked-set").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    // Entrée : première édition de la liste proposée par le navigateur (même filtre : texte contenu dans « Nom — CODE »).
+    const text = norm(e.target.value.trim());
+    const first = text && !byLabel.has(e.target.value.trim()) && [...byLabel.keys()].find((l) => norm(l).includes(text));
+    if (first) e.target.value = first;
+    e.preventDefault();
+    onChange();
+    e.target.blur();
+  });
   $("locked-set-clear").addEventListener("click", () => { lock(""); setStatus("Toutes les éditions", "ok"); });
 }
