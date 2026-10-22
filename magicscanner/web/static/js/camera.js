@@ -122,9 +122,26 @@ export async function initCamera() {
 export const isReady = () => video.videoWidth > 0;
 
 // Image pleine résolution (indépendante du zoom de l'aperçu).
-export function grabFrame() {
+export async function grabFrame() {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
-  canvas.getContext("2d").drawImage(video, 0, 0);
-  return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+  // Le canvas peut rester noir alors que l'aperçu s'affiche (décodage GPU, caméra virtuelle) : on essaie une autre voie.
+  const sources = [() => video, () => createImageBitmap(video)];
+  for (const source of sources) {
+    ctx.drawImage(await source(), 0, 0);
+    if (!isBlank(ctx)) return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+  }
+  restart("image capturée noire");
+  throw new Error("Capture noire : la caméra est relancée, réessaie dans un instant");
+}
+
+/** Vrai si l'image est entièrement noire (échantillon de pixels répartis sur tout le canvas). */
+function isBlank(ctx) {
+  const { width, height } = canvas;
+  for (let i = 1; i <= 8; i++) {
+    const d = ctx.getImageData(Math.floor((width * i) / 9), Math.floor((height * i) / 9), 1, 1).data;
+    if (d[0] + d[1] + d[2] > 12) return false;
+  }
+  return true;
 }

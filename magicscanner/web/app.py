@@ -120,6 +120,8 @@ async def _decode(image: UploadFile) -> np.ndarray:
     frame = cv2.imdecode(np.frombuffer(await image.read(), np.uint8), cv2.IMREAD_COLOR)
     if frame is None:
         raise HTTPException(400, "image invalide")
+    if frame.max() < 8:
+        raise HTTPException(400, "image noire : la caméra ne renvoie rien (relance la caméra)")
     return frame
 
 
