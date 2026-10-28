@@ -7,12 +7,16 @@ import numpy as np
 
 from ..catalog import Catalog, NameMatch
 from . import detect, list_symbol, ocr
-from .scoring import Candidate, Evidence, score_printing
+from .scoring import Candidate, Evidence, identity_score, score_printing
 
 NAME_TIE_MARGIN = 5     # noms gardés en lice s'ils sont à moins de 5 points du meilleur
 MAX_ORACLES = 3
+MAX_TIED_ORACLES = 40   # noms strictement à égalité (tokens homonymes) : tous gardés
+MAX_PRINTINGS = 15      # impressions comparées visuellement (téléchargement d'images) ; les autres sont écartées d'avance
 TITLE_FOUND = 92        # score minimal d'un nom lu dans l'image entière pour y repérer la carte
-AMBIGUOUS_GAP = 0.15   # deux premières impressions plus proches que ça ET vendues dans des produits différents
+SIDEWAYS_BELOW = 85     # nom lu moins bien que ça : on relit la carte de côté (cartes à deux moitiés)
+SIDEWAYS_MIN = 88       # score minimal d'un nom trouvé dans la lecture de côté (lignes quelconques : plus strict)
+AMBIGUOUS_GAP = 0.15  # deux premières impressions plus proches que ça ET vendues dans des produits différents
 OFF_SET_MARGIN = 8     # édition fixée : un nom hors édition ne l'emporte que s'il est lu nettement mieux
 
 
@@ -78,9 +82,18 @@ class Recognizer:
             lines = self.ocr.read(img)
             titles = ocr.title_candidates(lines)
             matches = self._match_names(titles, locked_set) if titles else []
-            attempt = attempt or (img, lines, titles, matches)
+            attempt = attempt if attempt and not matches else (img, lines, titles, matches)
             if matches:
-                return img, lines, titles, matches
+                if matches[0].score >= SIDEWAYS_BELOW:
+                    return attempt
+                break
+        # Carte à deux moitiés (split…) : noms imprimés tournés à 90°. Les lignes du bas (numéro, édition) restent
+        # celles de la carte droite ; seul le nom vient de la lecture de côté.
+        for code in (cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_90_COUNTERCLOCKWISE):
+            titles = ocr.sideways_titles(self.ocr.read(cv2.rotate(card, code)))
+            side = [m for m in self._match_names(titles, locked_set) if m.score >= SIDEWAYS_MIN] if titles else []
+            if side and (not attempt[3] or side[0].score > attempt[3][0].score):
+                return attempt[0], attempt[1], titles, side
         return attempt
 
     def _locate_by_text(self, frame: np.ndarray, locked_set: str | None = None):
@@ -128,7 +141,9 @@ class Recognizer:
         rec.list_symbol = round(list_symbol.symbol_score(card), 3)
         best_name = matches[0]
         rec.lang = ocr.detect_language(lines) or best_name.lang
-        contenders = [m for m in matches if m.score >= best_name.score - NAME_TIE_MARGIN][:MAX_ORACLES]
+        near = [m for m in matches if m.score >= best_name.score - NAME_TIE_MARGIN]
+        tied = [m for m in near if m.score == best_name.score]
+        contenders = tied[:MAX_TIED_ORACLES] if len(tied) > MAX_ORACLES else near[:MAX_ORACLES]
         evidence = Evidence(
             lang=rec.lang,
             collector=ocr.collector_info(lines),
@@ -137,12 +152,17 @@ class Recognizer:
             previous_set=previous_set,
             foil=foil,
             list_symbol=list_symbol.evidence(rec.list_symbol),
+            power_toughness=ocr.power_toughness(lines),
+            artist_text=ocr.artist_text(lines),
         )
         printings = self.catalog.printings([m.oracle_id for m in contenders])
         if locked_set:
-            in_set = [p for p in printings if p["set_code"] == locked_set]
+            family = self.catalog.set_family(locked_set)
+            in_set = [p for p in printings if p["set_code"] in family]
             rec.off_set = not in_set
             printings = in_set or printings
+        if len(printings) > MAX_PRINTINGS:
+            printings = sorted(printings, key=lambda p: -identity_score(p, evidence))[:MAX_PRINTINGS]
         rec.candidates = sorted(self._pool.map(lambda p: score_printing(card, p, evidence), printings),
                                 key=lambda c: -c.score)
         if rec.candidates:

@@ -42,7 +42,12 @@ CREATE TABLE IF NOT EXISTS cards (
     promo INTEGER DEFAULT 0,
     set_type TEXT,
     finishes TEXT,        -- « nonfoil,foil » : une impression foil-only ne peut pas être une carte non-foil
-    promo_types TEXT      -- « surgefoil,universesbeyond »…
+    promo_types TEXT,     -- « surgefoil,universesbeyond »…
+    power TEXT,           -- force / endurance de la première face (« * » possible) : distingue les tokens de même nom
+    toughness TEXT,
+    colors TEXT,          -- « G,R »
+    type_line TEXT,
+    artist TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_cards_oracle ON cards(oracle_id);
 CREATE INDEX IF NOT EXISTS idx_cards_set_num ON cards(set_code, collector_number);
@@ -69,6 +74,7 @@ CREATE TABLE IF NOT EXISTS sets (
     card_count INTEGER,
     printed_size INTEGER,
     icon_svg TEXT,
+    parent_set_code TEXT,        -- édition annexe (tokens, art series…) -> édition principale
     cm_id_expansion INTEGER,
     cm_slug TEXT,
     cm_slug_source TEXT          -- 'cardmarket' (scrapé) | 'guess' (dérivé du nom) | 'manual'
@@ -157,9 +163,11 @@ def _columns(con: sqlite3.Connection, table: str) -> set[str]:
 
 def _migrate(con: sqlite3.Connection) -> None:
     """Colonnes ajoutées après la création des bases existantes (CREATE TABLE IF NOT EXISTS ne les ajoute pas)."""
-    for column in ("finishes", "promo_types"):
+    for column in ("finishes", "promo_types", "power", "toughness", "colors", "type_line", "artist"):
         if column not in _columns(con, "cards"):
             con.execute(f"ALTER TABLE cards ADD COLUMN {column} TEXT")
+    if "parent_set_code" not in _columns(con, "sets"):
+        con.execute("ALTER TABLE sets ADD COLUMN parent_set_code TEXT")
     if "exported_quantity" not in _columns(con, "inventory"):
         con.execute("ALTER TABLE inventory ADD COLUMN exported_quantity INTEGER NOT NULL DEFAULT 0")
     if "trend_foil" not in _columns(con, "cm_prices"):

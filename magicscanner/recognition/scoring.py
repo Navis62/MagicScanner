@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from rapidfuzz import fuzz
 
+from ..catalog.lookup import normalize
 from . import visual
 from .ocr import CollectorInfo
 
@@ -31,6 +32,14 @@ LIST_PRIOR = -0.05
 # non-foil-only pour une carte foil) ne peut pas être la carte posée sous la caméra, même si son image est identique.
 NOT_NONFOIL = -0.30
 
+# Force / endurance lues : l'indice qui départage des tokens de même nom (une vingtaine d'« Elemental »).
+PT_MATCH = 0.40
+PT_MISMATCH = -0.40
+ARTIST_MATCH = 0.10       # nom de l'illustrateur retrouvé dans le texte du bas de carte
+TOKEN_LAYOUTS = {"token", "double_faced_token", "emblem"}
+# Un token est une carte entièrement colorée : la couleur du cadre compte bien plus, et le symbole d'édition (petit) moins.
+TOKEN_W_GLOBAL, TOKEN_W_SYMBOL, TOKEN_W_COLOR = 0.45, 0.15, 0.40
+
 
 @dataclass(frozen=True)
 class Evidence:
@@ -42,6 +51,8 @@ class Evidence:
     previous_set: str | None = None
     list_symbol: float = 0.0        # indice signé du symbole The List (cf. list_symbol.evidence)
     foil: bool = False              # case « foil » cochée au moment du scan
+    power_toughness: tuple[str, str] | None = None   # force / endurance lues en bas à droite
+    artist_text: str = ""           # texte lu en bas à gauche
 
 
 @dataclass
@@ -61,6 +72,16 @@ def printed_identity(p: sqlite3.Row) -> tuple[str, str]:
     return p["set_code"], p["collector_number"]
 
 
+def identity_score(p: sqlite3.Row, ev: Evidence) -> float:
+    """Indices peu coûteux (pas d'image) : force/endurance et illustrateur. Sert aussi à écarter d'avance les candidats."""
+    score = 0.0
+    if ev.power_toughness and p["power"] is not None and p["toughness"] is not None:
+        score += PT_MATCH if ev.power_toughness == (p["power"], p["toughness"]) else PT_MISMATCH
+    if p["artist"] and len(p["artist"]) >= 5 and normalize(p["artist"]) in normalize(ev.artist_text):
+        score += ARTIST_MATCH
+    return score
+
+
 def _best_visual(scan: np.ndarray, image_urls: list[str]) -> dict:
     best = {"score": 0.0, "global": 0.0, "symbol": 0.0, "color": 0.0}
     for url in image_urls:
@@ -76,7 +97,11 @@ def score_printing(scan: np.ndarray, p: sqlite3.Row, ev: Evidence) -> Candidate:
     # Comparaison avec le scan Scryfall VF si dispo (même texte), sinon la VO.
     images = [u for u in ((p["fr_image"] if ev.lang == "fr" else None), p["image_normal"]) if u]
     vis = _best_visual(scan, images)
-    score = W_GLOBAL * vis["global"] + W_SYMBOL * vis["symbol"] + W_COLOR * vis["color"]
+    if p["layout"] in TOKEN_LAYOUTS:
+        score = TOKEN_W_GLOBAL * vis["global"] + TOKEN_W_SYMBOL * vis["symbol"] + TOKEN_W_COLOR * vis["color"]
+    else:
+        score = W_GLOBAL * vis["global"] + W_SYMBOL * vis["symbol"] + W_COLOR * vis["color"]
+    score += identity_score(p, ev)
     reasons = []
     code, number = printed_identity(p)
     is_list = p["set_code"] == LIST_SET

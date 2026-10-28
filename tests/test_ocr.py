@@ -64,3 +64,8 @@ def test_card_position_is_deduced_from_the_title_and_the_footer_lines():
 def test_title_and_footer_too_close_give_no_card():
     line = ocr.PixelLine("x", 0, 100, 10)
     assert ocr.card_from_title(line, ocr.PixelLine("y", 0, 150, 10)) is None
+
+
+def test_sideways_titles_keep_short_lines_only():
+    lines = [line("Error", 0.30), line("Counter target multicolored spell, then draw a card", 0.5), line("Trial", 0.1)]
+    assert ocr.sideways_titles(lines) == ["Trial", "Error"]

@@ -8,6 +8,9 @@ from rapidfuzz import fuzz, process
 
 from ..market import urls
 
+# Les tokens partagent leur nom (une vingtaine d'« Elemental » distincts) : il faut tous les garder en lice.
+MATCH_LIMIT = 40
+
 PRINTING_SQL = """
     SELECT c.*, s.name AS set_name, s.icon_svg, s.released_at AS set_date,
            COALESCE(s.printed_size, s.card_count) AS set_size,
@@ -86,10 +89,18 @@ class Catalog:
                 self._names.append(normalize(fr_name))
                 self._meta.append((oracle_id, "fr", fr_name))
 
+    def set_family(self, set_code: str) -> set[str]:
+        """L'édition et ses éditions annexes (tokens, art series…) : un token d'OGW est dans « togw »."""
+        family = {set_code}
+        family.update(r[0] for r in self.con.execute("SELECT code FROM sets WHERE parent_set_code = ?", (set_code,)))
+        return family
+
     def _names_in_set(self, set_code: str) -> tuple[list[str], list[tuple]]:
         """Noms (toutes langues) des cartes imprimées dans une édition : la liste de recherche quand l'édition est fixée."""
         if set_code not in self._by_set:
-            oracles = {r[0] for r in self.con.execute("SELECT DISTINCT oracle_id FROM cards WHERE set_code = ?", (set_code,))}
+            family = sorted(self.set_family(set_code))
+            marks = ",".join("?" * len(family))
+            oracles = {r[0] for r in self.con.execute(f"SELECT DISTINCT oracle_id FROM cards WHERE set_code IN ({marks})", family)}
             keep = [i for i, meta in enumerate(self._meta) if meta[0] in oracles]
             self._by_set[set_code] = [self._names[i] for i in keep], [self._meta[i] for i in keep]
         return self._by_set[set_code]
@@ -100,7 +111,7 @@ class Catalog:
         names, metas = self._names_in_set(set_code) if set_code else (self._names, self._meta)
         best: dict[str, NameMatch] = {}
         for text in texts:
-            for _, score, idx in process.extract(normalize(text), names, scorer=fuzz.ratio, limit=8):
+            for _, score, idx in process.extract(normalize(text), names, scorer=fuzz.ratio, limit=MATCH_LIMIT):
                 oracle_id, lang, name = metas[idx]
                 if score >= min_score and (oracle_id not in best or score > best[oracle_id].score):
                     best[oracle_id] = NameMatch(oracle_id, lang, name, score)
@@ -126,7 +137,8 @@ class Catalog:
         if not matches:
             return None, []
         rows = sorted(self.printings([m.oracle_id for m in matches]), key=lambda p: p["released_at"] or "", reverse=True)
-        rows.sort(key=lambda p: p["set_code"] != set_code)   # tri stable : l'édition fixée en tête
+        family = self.set_family(set_code) if set_code else set()
+        rows.sort(key=lambda p: p["set_code"] not in family)   # tri stable : l'édition fixée en tête
         return matches[0].lang, [p["id"] for p in rows[:limit]]
 
     def card_info(self, card_id: str, lang: str | None = None, foil: bool = False) -> dict:

@@ -22,11 +22,12 @@ from .download import download
 
 log = logging.getLogger(__name__)
 
-SKIP_LAYOUTS = {"token", "double_faced_token", "emblem", "art_series", "vanguard", "planar", "scheme", "reversible_card"}
-SKIP_SET_TYPES = {"token", "memorabilia", "minigame", "alchemy", "vanguard", "treasure_chest"}
+SKIP_LAYOUTS = {"vanguard", "planar", "scheme", "reversible_card"}
+SAME_SIDE_LAYOUTS = {"split", "fuse", "aftermath", "flip"}
+SKIP_SET_TYPES = {"memorabilia", "minigame", "alchemy", "vanguard", "treasure_chest"}
 CARD_COLUMNS = ("id", "oracle_id", "name", "front_name", "set_code", "collector_number", "rarity", "cardmarket_id",
                 "image_normal", "image_small", "released_at", "layout", "frame", "promo", "set_type",
-                "finishes", "promo_types")
+                "finishes", "promo_types", "power", "toughness", "colors", "type_line", "artist")
 
 
 def download_bulk(force: bool = False) -> Path:
@@ -48,13 +49,14 @@ def latest_bulk() -> Path | None:
 def import_sets(con: sqlite3.Connection) -> None:
     data = httpx.get(SCRYFALL_SETS_URL, headers=SCRYFALL_HEADERS, timeout=60).json()["data"]
     con.executemany(
-        """INSERT INTO sets (code, name, released_at, set_type, card_count, printed_size, icon_svg)
-           VALUES (?,?,?,?,?,?,?)
+        """INSERT INTO sets (code, name, released_at, set_type, card_count, printed_size, icon_svg, parent_set_code)
+           VALUES (?,?,?,?,?,?,?,?)
            ON CONFLICT(code) DO UPDATE SET name=excluded.name, released_at=excluded.released_at,
              set_type=excluded.set_type, card_count=excluded.card_count,
-             printed_size=excluded.printed_size, icon_svg=excluded.icon_svg""",
+             printed_size=excluded.printed_size, icon_svg=excluded.icon_svg,
+             parent_set_code=excluded.parent_set_code""",
         [(s["code"], s["name"], s.get("released_at"), s.get("set_type"), s.get("card_count"),
-          s.get("printed_size"), s.get("icon_svg_uri")) for s in data],
+          s.get("printed_size"), s.get("icon_svg_uri"), s.get("parent_set_code")) for s in data],
     )
     con.commit()
     log.info("%d éditions", len(data))
@@ -67,6 +69,19 @@ def _front(card: dict, key: str) -> str | None:
         return faces[0][key]
     v = card.get(key)
     return v.split(" // ")[0] if v else None
+
+
+def _front_colors(card: dict) -> list[str]:
+    faces = card.get("card_faces")
+    return card.get("colors") or (faces[0].get("colors") if faces else None) or []
+
+
+def _other_faces(card: dict, key: str) -> list[str]:
+    """Noms des faces suivantes des cartes à deux moitiés imprimées sur la même face (split, fuse, aftermath, flip) :
+    le nom lu peut être celui de n'importe quelle moitié."""
+    if card.get("layout") not in SAME_SIDE_LAYOUTS:
+        return []
+    return [f[key] for f in (card.get("card_faces") or [])[1:] if f.get(key)]
 
 
 def _image(card: dict, size: str) -> str | None:
@@ -82,7 +97,7 @@ def _keep(card: dict) -> bool:
         and "paper" in card.get("games", [])
         and not card.get("oversized")
         and card.get("layout") not in SKIP_LAYOUTS
-        and card.get("set_type") not in SKIP_SET_TYPES
+        and (card.get("set_type") not in SKIP_SET_TYPES or card.get("layout") == "art_series")
     )
 
 
@@ -101,6 +116,7 @@ def _card_row(c: dict, oracle_id: str | None) -> tuple:
         c.get("cardmarket_id"), _image(c, "normal"), _image(c, "small"), c.get("released_at"),
         c.get("layout"), c.get("frame"), int(bool(c.get("promo"))), c.get("set_type"),
         ",".join(c.get("finishes", [])), ",".join(c.get("promo_types", [])),
+        _front(c, "power"), _front(c, "toughness"), ",".join(_front_colors(c)), _front(c, "type_line"), _front(c, "artist"),
     )
 
 
@@ -115,6 +131,7 @@ def import_cards(con: sqlite3.Connection, path: Path) -> None:
             cards.append(_card_row(c, oracle_id))
             en_keys.add(key)
             names.add((oracle_id, "en", _front(c, "name")))
+            names.update((oracle_id, "en", n) for n in _other_faces(c, "name"))
         else:
             printed = c.get("printed_name") or " // ".join(f.get("printed_name", "") for f in c.get("card_faces", [])) or None
             front = _front(c, "printed_name")
@@ -122,6 +139,7 @@ def import_cards(con: sqlite3.Connection, path: Path) -> None:
             fr_only.setdefault(key, _card_row(c, oracle_id))
             if front:
                 names.add((oracle_id, c["lang"], front))
+            names.update((oracle_id, c["lang"], n) for n in _other_faces(c, "printed_name"))
 
     orphans = [row for key, row in fr_only.items() if key not in en_keys]
     cards += orphans

@@ -82,6 +82,13 @@ def title_candidates(lines: list[OcrLine]) -> list[str]:
     return [l.text for l in top[:3]]
 
 
+def sideways_titles(lines: list[OcrLine]) -> list[str]:
+    """Cartes à deux moitiés (split, aftermath…) : les noms sont imprimés tournés à 90° et n'importe où sur la carte.
+    Sur l'image remise à l'endroit, on prend toutes les lignes courtes, de haut en bas."""
+    short = sorted((l for l in lines if 3 <= len(l.text) <= 25 and l.score >= 0.5), key=lambda l: (l.y, l.x))
+    return [l.text for l in short[:12]]
+
+
 def _strip_zeros(n: str) -> str:
     return n.lstrip("0") or "0"
 
@@ -100,6 +107,22 @@ def collector_info(lines: list[OcrLine]) -> CollectorInfo:
         if number is None and (m := RECENT_NUMBER.match(text)):
             number = _strip_zeros(m.group(1) or m.group(2))  # cadre récent : « 0087 U » ou, selon l'édition, « C 0126 »
     return CollectorInfo(number, total, set_code)
+
+
+# Force / endurance (« 4/4 », « */3 ») : cadre en bas à droite, au-dessus de la ligne du copyright.
+PT = re.compile(r"^\s*(\d{1,2}|\*)\s*/\s*(\d{1,2}|\*)\s*$")
+
+
+def power_toughness(lines: list[OcrLine]) -> tuple[str, str] | None:
+    for l in lines:
+        if l.y > 0.80 and l.x > 0.55 and (m := PT.match(l.text)):
+            return m.group(1), m.group(2)
+    return None
+
+
+def artist_text(lines: list[OcrLine]) -> str:
+    """Texte du bas gauche de la carte (nom de l'illustrateur, après « Illus. » ou la brosse)."""
+    return " ".join(l.text for l in lines if l.y > 0.88 and l.x < 0.5)
 
 
 def detect_language(lines: list[OcrLine]) -> str | None:
