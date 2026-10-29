@@ -120,8 +120,45 @@ def _card_row(c: dict, oracle_id: str | None) -> tuple:
     )
 
 
+def _subtypes(type_line: str | None, sep: str) -> list[str]:
+    """Sous-types d'une ligne de type (« Creature — Cat Spirit » -> [cat, spirit] ; « Créature : chat et esprit »)."""
+    if not type_line or " // " in type_line or sep not in type_line:
+        return []
+    return type_line.split(sep, 1)[1].lower().replace(" et ", " ").split()
+
+
+def _type_translations(pairs: list[tuple[str, list[str]]]) -> dict[tuple[str, str], str]:
+    """Sous-types EN -> localisés, par vote sur les fiches traduites (les deux lignes de type listent les mêmes sous-types)."""
+    votes: dict[tuple[str, str], dict[str, int]] = {}
+    for lang, (en, loc) in pairs:
+        if len(en) == len(loc):
+            for a, b in zip(en, loc, strict=True):
+                votes.setdefault((lang, a), {}).setdefault(b, 0)
+                votes[(lang, a)][b] += 1
+    return {k: max(v, key=v.get) for k, v in votes.items()}
+
+
+def _token_names(cards: list[tuple], translations: dict[tuple[str, str], str], langs: set[str]) -> set[tuple]:
+    """Scryfall ne traduit pas les tokens (aucune fiche VF) : le nom imprimé d'un token est son ou ses sous-types
+    (« Oiseau », « Soldat kithkin »), qu'on déduit de la traduction des sous-types des cartes ordinaires."""
+    i_layout, i_name, i_oracle = CARD_COLUMNS.index("layout"), CARD_COLUMNS.index("front_name"), CARD_COLUMNS.index("oracle_id")
+    names = set()
+    for row in cards:
+        if row[i_layout] not in ("token", "double_faced_token") or not row[i_oracle]:
+            continue
+        words = row[i_name].lower().split()
+        for lang in langs:
+            loc = [translations.get((lang, w)) for w in words]
+            if not all(loc):
+                continue
+            variants = {" ".join(loc), " ".join(reversed(loc)), " et ".join(loc), " et ".join(reversed(loc))}
+            names.update((row[i_oracle], lang, v.capitalize()) for v in variants)
+    return names
+
+
 def import_cards(con: sqlite3.Connection, path: Path) -> None:
     cards, localized, names = [], [], set()
+    type_pairs: list[tuple[str, tuple[list[str], list[str]]]] = []
     en_keys: set[tuple[str, str]] = set()
     fr_only: dict[tuple[str, str], tuple] = {}   # éditions sans fiche anglaise (ex. FBB) : la fiche FR sert d'impression
     for c in filter(_keep, _read_bulk(path)):
@@ -137,6 +174,8 @@ def import_cards(con: sqlite3.Connection, path: Path) -> None:
             front = _front(c, "printed_name")
             localized.append((c["id"], c["lang"], oracle_id, c["set"], c["collector_number"], printed, front, _image(c, "normal")))
             fr_only.setdefault(key, _card_row(c, oracle_id))
+            type_pairs.append((c["lang"], (_subtypes(c.get("type_line"), " — "), _subtypes(c.get("printed_type_line"), " : ")
+                                           or _subtypes(c.get("printed_type_line"), " — "))))
             if front:
                 names.add((oracle_id, c["lang"], front))
             names.update((oracle_id, c["lang"], n) for n in _other_faces(c, "printed_name"))
@@ -144,6 +183,7 @@ def import_cards(con: sqlite3.Connection, path: Path) -> None:
     orphans = [row for key, row in fr_only.items() if key not in en_keys]
     cards += orphans
     names.update((row[1], "en", row[3]) for row in orphans)
+    names |= _token_names(cards, _type_translations(type_pairs), {lang for lang, _ in type_pairs})
     # cards est référencée par l'inventaire : mise à jour en place, jamais de DELETE.
     con.executemany(
         f"""INSERT INTO cards ({", ".join(CARD_COLUMNS)}) VALUES ({", ".join("?" * len(CARD_COLUMNS))})
