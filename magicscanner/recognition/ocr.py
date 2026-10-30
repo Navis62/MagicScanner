@@ -62,6 +62,7 @@ class OcrEngine:
 # Position des repères sur une carte (fractions de sa hauteur) : centre du titre, ligne la plus basse à gauche
 # (code d'édition / langue), et retrait du texte par rapport au bord gauche (fraction de sa largeur).
 TITLE_CENTER, FOOTER_CENTER, TEXT_INSET = 0.060, 0.945, 0.095
+TITLE_BAND = 0.04   # hauteur (fraction de la carte) du bandeau du titre : au-delà de la ligne la plus haute, ce n'est plus le nom
 
 
 def card_from_title(title: PixelLine, footer: PixelLine) -> np.ndarray | None:
@@ -76,16 +77,33 @@ def card_from_title(title: PixelLine, footer: PixelLine) -> np.ndarray | None:
     return np.float32([[left, top], [left + width, top], [left + width, top + height], [left, top + height]])
 
 
+FLAVOR_START = "—–-―«»“”\"'’‘*~_.,:;"
+
+
+def is_flavor(text: str) -> bool:
+    """Texte d'ambiance (italique) : la citation commence par un guillemet, et la signature par un tiret
+    (« —Sedris, le Roi traître »). Ce n'est jamais le nom de la carte."""
+    return text.strip()[:1] in FLAVOR_START
+
+
 def title_candidates(lines: list[OcrLine]) -> list[str]:
-    """Textes du bandeau de titre (haut-gauche), du plus haut au plus bas."""
-    top = sorted((l for l in lines if l.y < 0.13 and l.x < 0.6 and len(l.text) >= 3), key=lambda l: (l.y, l.x))
+    """Textes du bandeau de titre (haut-gauche), du plus haut au plus bas. Seules les lignes proches de la plus haute
+    sont gardées : sinon, sur une carte mal redressée, la ligne de type (« Creature — Human Rogue ») passe pour un
+    nom et peut l'emporter sur le vrai titre."""
+    top = sorted((l for l in lines if l.y < 0.13 and l.x < 0.6 and len(l.text) >= 3 and not is_flavor(l.text)),
+                 key=lambda l: (l.y, l.x))
+    top = [l for l in top if top and l.y - top[0].y < TITLE_BAND]
     return [l.text for l in top[:3]]
 
 
-def sideways_titles(lines: list[OcrLine]) -> list[str]:
+def sideways_titles(lines: list[OcrLine], upright: list[OcrLine] = ()) -> list[str]:
     """Cartes à deux moitiés (split, aftermath…) : les noms sont imprimés tournés à 90° et n'importe où sur la carte.
-    Sur l'image remise à l'endroit, on prend toutes les lignes courtes, de haut en bas."""
-    short = sorted((l for l in lines if 3 <= len(l.text) <= 25 and l.score >= 0.5), key=lambda l: (l.y, l.x))
+    Sur l'image remise à l'endroit, on prend toutes les lignes courtes, de haut en bas. Les lignes déjà lues à
+    l'endroit (ligne de type « Éphémère », mots du texte) ne sont pas des noms tournés : on les écarte."""
+    seen = {l.text.lower() for l in upright}
+    short = sorted((l for l in lines if 3 <= len(l.text) <= 25 and l.score >= 0.5 and l.text.lower() not in seen
+                    and not is_flavor(l.text)),
+                   key=lambda l: (l.y, l.x))
     return [l.text for l in short[:12]]
 
 

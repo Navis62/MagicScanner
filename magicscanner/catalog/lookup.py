@@ -49,7 +49,7 @@ MISSING_FR_NAMES = {
 
 def normalize(s: str) -> str:
     """Minuscules, sans accents ni ponctuation : robuste aux approximations de l'OCR."""
-    s = unicodedata.normalize("NFKD", s.lower())
+    s = unicodedata.normalize("NFKD", s.lower()).replace("æ", "ae").replace("œ", "oe")
     s = "".join(c for c in s if not unicodedata.combining(c))
     return re.sub(r"[^a-z0-9]+", " ", s).strip()
 

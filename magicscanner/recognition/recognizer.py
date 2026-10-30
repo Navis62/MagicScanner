@@ -81,7 +81,10 @@ class Recognizer:
         for img in (card, cv2.rotate(card, cv2.ROTATE_180)):
             lines = self.ocr.read(img)
             titles = ocr.title_candidates(lines)
-            matches = self._match_names(titles, locked_set) if titles else []
+            # Le nom est la première ligne : les suivantes (ligne de type, « Éphémère ») ne servent que si elle est illisible.
+            matches = self._match_names(titles[:1], locked_set) if titles else []
+            if len(titles) > 1 and (not matches or matches[0].score < SIDEWAYS_BELOW):
+                matches = self._match_names(titles, locked_set) or matches
             attempt = attempt if attempt and not matches else (img, lines, titles, matches)
             if matches:
                 if matches[0].score >= SIDEWAYS_BELOW:
@@ -90,7 +93,7 @@ class Recognizer:
         # Carte à deux moitiés (split…) : noms imprimés tournés à 90°. Les lignes du bas (numéro, édition) restent
         # celles de la carte droite ; seul le nom vient de la lecture de côté.
         for code in (cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_90_COUNTERCLOCKWISE):
-            titles = ocr.sideways_titles(self.ocr.read(cv2.rotate(card, code)))
+            titles = ocr.sideways_titles(self.ocr.read(cv2.rotate(card, code)), attempt[1])
             side = [m for m in self._match_names(titles, locked_set) if m.score >= SIDEWAYS_MIN] if titles else []
             if side and (not attempt[3] or side[0].score > attempt[3][0].score):
                 return attempt[0], attempt[1], titles, side
@@ -102,8 +105,18 @@ class Recognizer:
         retourné, texte décalé) : on propose plusieurs positions, de la plus plausible à la moins plausible."""
         lines = self.ocr.read_pixels(frame)
         titles = [(m[0].score, -l.y, l) for l in lines
-                  if len(l.text) >= 4 and (m := self._match_names([l.text], locked_set)) and m[0].score >= TITLE_FOUND]
+                  if len(l.text) >= 4 and not ocr.is_flavor(l.text) and (m := self._match_names([l.text], locked_set)) and m[0].score >= TITLE_FOUND]
         for _, _, title in sorted(titles, key=lambda t: t[:2], reverse=True):
+            # Ligne de type (« Éphémère ») ou autre texte qui ressemble à un nom : un vrai titre n'a pas de nom lisible
+            # au-dessus de lui dans la même colonne (la carte déduite serait décalée vers le bas).
+            if any(o is not title and o.y < title.y and abs(o.x - title.x) < 0.15 * (title.y - o.y)
+                   for _, _, o in titles):
+                continue
+            # Texte de la carte (règles, citation en italique « —Sedris, le Roi traître ») : plusieurs lignes lisibles
+            # juste au-dessus, dans la largeur d'une carte (~21 hauteurs de ligne) ; un vrai titre n'a que le fond.
+            if sum(l.y < title.y - 2 * title.height and abs(l.x - title.x) < 15 * title.height and len(l.text) >= 3
+                   for l in lines) >= 3:
+                continue
             below = [l for l in lines if l.y > title.y + 6 * title.height]
             aligned = [l for l in below if abs(l.x - title.x) < 0.15 * (l.y - title.y)]
             others = [l for l in below if l not in aligned]
