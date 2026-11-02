@@ -44,6 +44,8 @@ MISSING_FR_NAMES = {
     "Kuon, Ogre Ascendant": "Kuon, ascendant ogre",
     "Homura, Human Ascendant": "Homura, ascendant humain",
     "Sasaya, Orochi Ascendant": "Sasaya, ascendant orochi",
+    # Pas un token à sous-types : son nom VF ne peut pas être déduit de la traduction des sous-types.
+    "Poison Counter": "Marqueur « poison »",
 }
 
 

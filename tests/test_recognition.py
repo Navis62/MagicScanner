@@ -117,3 +117,18 @@ def test_the_borderless_spiderman_is_identified():
     best = catalog.card_info(rec.best.card_id)
     assert rec.ok and (best["name"], best["set_code"], best["collector_number"]) == ("Spider-Man, To the Rescue", "msh", "335")
     con.close()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not DB_PATH.exists(), reason="base non importée")
+def test_the_french_poison_counter_is_identified():
+    from magicscanner import db
+    from magicscanner.catalog import Catalog
+    from magicscanner.recognition import Recognizer
+
+    con = db.connect()
+    catalog = Catalog(con)
+    rec = Recognizer(catalog).recognize(cv2.imread(str(FIXTURES / "poison_counter_mbs_fr_failed.jpg")))
+    best = catalog.card_info(rec.best.card_id)
+    assert rec.ok and rec.lang == "fr" and (best["name"], best["set_code"]) == ("Poison Counter", "tmbs")
+    con.close()

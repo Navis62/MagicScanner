@@ -39,6 +39,8 @@ ARTIST_MATCH = 0.10       # nom de l'illustrateur retrouvé dans le texte du bas
 TOKEN_LAYOUTS = {"token", "double_faced_token", "emblem"}
 # Un token est une carte entièrement colorée : la couleur du cadre compte bien plus, et le symbole d'édition (petit) moins.
 TOKEN_W_GLOBAL, TOKEN_W_SYMBOL, TOKEN_W_COLOR = 0.45, 0.15, 0.40
+# Marqueurs (« Poison Counter ») : pas de symbole d'édition ni de couleur propre, seul le dessin du cadre distingue les éditions.
+NO_GAME_TYPE = "Card"
 
 
 @dataclass(frozen=True)
@@ -97,7 +99,9 @@ def score_printing(scan: np.ndarray, p: sqlite3.Row, ev: Evidence) -> Candidate:
     # Comparaison avec le scan Scryfall VF si dispo (même texte), sinon la VO.
     images = [u for u in ((p["fr_image"] if ev.lang == "fr" else None), p["image_normal"]) if u]
     vis = _best_visual(scan, images)
-    if p["layout"] in TOKEN_LAYOUTS:
+    if p["type_line"] == NO_GAME_TYPE:
+        score = vis["global"]
+    elif p["layout"] in TOKEN_LAYOUTS:
         score = TOKEN_W_GLOBAL * vis["global"] + TOKEN_W_SYMBOL * vis["symbol"] + TOKEN_W_COLOR * vis["color"]
     else:
         score = W_GLOBAL * vis["global"] + W_SYMBOL * vis["symbol"] + W_COLOR * vis["color"]
