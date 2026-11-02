@@ -42,7 +42,14 @@ export async function initEdition() {
   }
   lock(store.get(KEY, ""));
   $("locked-set").addEventListener("change", onChange);
-  $("locked-set").addEventListener("focus", (e) => e.target.select());
+  // Clic sur une ligne de la liste : l'événement « input » n'est pas une frappe (inputType absent ou insertReplacementText).
+  $("locked-set").addEventListener("input", (e) => {
+    const picked = !e.inputType || e.inputType === "insertReplacementText";
+    if (!picked || !byLabel.has(e.target.value.trim())) return;
+    onChange();
+    e.target.blur();
+  });
+  $("locked-set").addEventListener("focus",(e) => e.target.select());
   $("locked-set").addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
     // Entrée : première édition de la liste proposée par le navigateur (même filtre : texte contenu dans « Nom — CODE »).

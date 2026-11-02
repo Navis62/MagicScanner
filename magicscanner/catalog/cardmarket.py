@@ -2,6 +2,7 @@
 aux extensions Cardmarket (idExpansion + slug d'URL)."""
 import json
 import logging
+import re
 import sqlite3
 from collections import Counter, defaultdict
 
@@ -89,6 +90,15 @@ ORDERED_SETS = {"fbb"}
 LINKED_SETS = {"plst": LIST_EXPANSIONS, "fbb": (57,), "ren": (60,), "psal": (105,)}
 
 
+TOKEN_SUFFIX = re.compile(r"\s+Token\b(\s*\([^)]*\))?\s*$", re.I)   # « Kor Soldier Token (White 1/1) » -> « Kor Soldier »
+
+
+def _token_sets(con: sqlite3.Connection) -> dict[str, tuple[int, ...]]:
+    """Éditions de tokens : leurs produits sont dans l'extension Cardmarket de l'édition (« Skeleton Token (Black 1/1) »)."""
+    return {r["code"]: (r["cm_id_expansion"],) for r in con.execute(
+        "SELECT code, cm_id_expansion FROM sets WHERE set_type='token' AND cm_id_expansion IS NOT NULL")}
+
+
 def link_list_cards(con: sqlite3.Connection) -> int:
     """Scryfall n'indique pas l'idProduct de certaines cartes (environ 1 carte plst sur 5, quelques cartes de FBB,
     Renaissance, Salvat). On le retrouve par le nom, mais seulement quand ça ne laisse aucun doute : un seul produit de
@@ -96,11 +106,13 @@ def link_list_cards(con: sqlite3.Connection) -> int:
     l'édition sans identifiant de ce nom. Le reste reste en erreur plutôt que de risquer une annonce sur la mauvaise
     page. Renvoie le nombre de cartes rattachées."""
     linked = 0
-    for set_code, expansions in LINKED_SETS.items():
+    tokens = _token_sets(con)
+    for set_code, expansions in {**tokens, **LINKED_SETS}.items():
         marks = ",".join("?" * len(expansions))
         by_name: dict[str, list[int]] = defaultdict(list)
         for p in con.execute(f"SELECT id_product, name FROM cm_products WHERE id_expansion IN ({marks})", expansions):
-            by_name[p["name"].lower()].append(p["id_product"])
+            name = TOKEN_SUFFIX.sub("", p["name"]) if set_code in tokens else p["name"]
+            by_name[name.lower()].append(p["id_product"])
         taken = {r[0] for r in con.execute("SELECT cardmarket_id FROM cards WHERE set_code=? AND cardmarket_id IS NOT NULL", (set_code,))}
         missing = con.execute("SELECT id, name FROM cards WHERE set_code=? AND cardmarket_id IS NULL "
                               "ORDER BY CAST(collector_number AS INTEGER), collector_number", (set_code,)).fetchall()

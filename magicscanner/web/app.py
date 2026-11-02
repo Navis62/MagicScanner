@@ -255,6 +255,9 @@ def export_powertools(everything: bool = False):
     with svc.lock:
         content, lines, skipped = powertools.build(svc.con, everything)
     if not lines:
+        if skipped:
+            raise HTTPException(400, f"Rien à exporter : {skipped} carte(s) sans identifiant Cardmarket "
+                                     "(mets à jour les données Cardmarket).")
         raise HTTPException(400, "Rien à exporter : toutes les cartes ont déjà été exportées.")
     return Response(content, media_type="text/csv; charset=utf-8", headers={
         "Content-Disposition": 'attachment; filename="powertools-import.csv"',
