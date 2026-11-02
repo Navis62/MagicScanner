@@ -24,9 +24,9 @@ def _dash(s: str) -> str:
 def slug_variants(name: str, version: int | None = None) -> list[str]:
     base = _ascii(name).replace(" // ", " ").replace(" / ", " ")
     variants = [
-        _dash(re.sub(r"[,.!?:\"]", "", base)),                    # Akroma-s-Memorial (le plus courant : évite un essai raté)
-        _dash(re.sub(r"[',.!?:\"]", "", base)),                   # Markovs-Servant, Jace-the-Mind-Sculptor
-        _dash(re.sub(r"[',.!?:\"]", "", base.replace("-", ""))),  # LimDuls-Cohort
+        _dash(re.sub(r"[,.!?:\"/]", "", base)),                   # Akroma-s-Memorial (le plus courant : évite un essai raté), Ogre-Token-Red-33
+        _dash(re.sub(r"[',.!?:\"/]", "", base)),                  # Markovs-Servant, Jace-the-Mind-Sculptor
+        _dash(re.sub(r"[',.!?:\"/]", "", base.replace("-", ""))), # LimDuls-Cohort
     ]
     suffix = f"-V-{version}" if version else ""
     return list(dict.fromkeys(v + suffix for v in variants))

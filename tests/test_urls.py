@@ -15,6 +15,7 @@ BASE = "https://www.cardmarket.com/en/Magic/Products/Singles"
     ("Fire // Ice", None, "Fire-Ice"),
     ("Plains", 1, "Plains-V-1"),
     ("Aether Hub", None, "Aether-Hub"),
+    ("Ogre Token (Red 3/3)", None, "Ogre-Token-Red-33"),
 ])
 def test_real_slug_is_among_variants(name, version, expected):
     assert expected in urls.slug_variants(name, version)
