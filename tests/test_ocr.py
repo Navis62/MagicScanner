@@ -19,6 +19,13 @@ def test_title_is_top_left_text():
     assert title_candidates(lines) == ["Gargantua phyrexian"]
 
 
+def test_title_split_in_pieces_on_the_same_row_is_joined():
+    # Cas réel : « Seigneur de guerre renégat » lu en deux morceaux, seul le premier était cherché (→ « Seigneur du vide »).
+    lines = [line("guerre renegat", 0.011, x=0.36), line("Seigneur de", 0.007, x=0.05), line("1R", 0.01, x=0.85),
+             line("Invoquer: soldat", 0.56)]
+    assert title_candidates(lines)[0] == "Seigneur de guerre renegat"
+
+
 def test_collector_number_old_frame():
     assert collector_info([line("™ & © 2013 Wizards 87/356", 0.95)]) == CollectorInfo("87", "356", None)
 

@@ -63,6 +63,8 @@ class OcrEngine:
 # (code d'édition / langue), et retrait du texte par rapport au bord gauche (fraction de sa largeur).
 TITLE_CENTER, FOOTER_CENTER, TEXT_INSET = 0.060, 0.945, 0.095
 TITLE_BAND = 0.04   # hauteur (fraction de la carte) du bandeau du titre : au-delà de la ligne la plus haute, ce n'est plus le nom
+SAME_ROW = 0.015    # deux morceaux de texte à moins de ça en hauteur sont sur la même ligne
+TITLE_PIECE_MAX_X = 0.75   # au-delà, c'est le coût de mana, pas la suite du nom
 
 
 def card_from_title(title: PixelLine, footer: PixelLine) -> np.ndarray | None:
@@ -93,7 +95,14 @@ def title_candidates(lines: list[OcrLine]) -> list[str]:
     top = sorted((l for l in lines if l.y < 0.13 and l.x < 0.6 and len(l.text) >= 3 and not is_flavor(l.text)),
                  key=lambda l: (l.y, l.x))
     top = [l for l in top if top and l.y - top[0].y < TITLE_BAND]
-    return [l.text for l in top[:3]]
+    if not top:
+        return []
+    # Nom long coupé en plusieurs morceaux sur la même ligne (« Seigneur de » | « guerre renégat ») : on les recolle de
+    # gauche à droite, sinon seul le premier morceau est cherché et un nom plus court l'emporte (« Seigneur du vide »).
+    row = sorted((l for l in lines if abs(l.y - top[0].y) < SAME_ROW and l.x < TITLE_PIECE_MAX_X and len(l.text) >= 2
+                  and not is_flavor(l.text)), key=lambda l: l.x)
+    merged = [" ".join(l.text for l in row)] if len(row) > 1 else []
+    return merged + [l.text for l in top[:3]]
 
 
 def sideways_titles(lines: list[OcrLine], upright: list[OcrLine] = ()) -> list[str]:
