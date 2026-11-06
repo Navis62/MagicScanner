@@ -1,5 +1,5 @@
 // Aperçu de la caméra : une fenêtre portrait sur l'image, avec zoom et recentrage.
-// Affichage uniquement : la capture envoyée à la reconnaissance reste l'image entière, en pleine résolution.
+// La capture reste l'image entière en pleine résolution ; zoomé, le serveur n'en analyse que la zone affichée (cropArea).
 import { api } from "./api.js";
 import { grabFrame, video } from "./camera.js";
 import { $, store } from "./dom.js";
@@ -52,6 +52,23 @@ function apply(save = true) {
 }
 
 export const isDefaultZoom = () => view.z === 1;
+
+const CROP_MARGIN = 0.25;   // marge autour de la zone affichée (fraction de sa taille) : carte un peu hors cadre
+// Point de l'image affichée -> point de l'image d'origine (inverse de TO_DISPLAY).
+const TO_SOURCE = [([x, y]) => [x, y], ([x, y]) => [y, 1 - x], ([x, y]) => [1 - x, 1 - y], ([x, y]) => [1 - y, x]];
+
+/** Zone de l'image d'origine à analyser (fractions x0, y0, x1, y1) : ce que montre l'aperçu zoomé, plus une marge. Sans
+ * zoom, toute l'image (null). Le tapis, la boîte et les cartes voisines hors champ ne peuvent plus passer pour la carte. */
+export function cropArea() {
+  if (view.z <= 1) return null;
+  const { vw, vh, W, H, z, tx, ty } = placement();
+  if (!vw || !vh) return null;
+  const [dx0, dy0, dx1, dy1] = [-tx / (W * z), -ty / (H * z), (vw - tx) / (W * z), (vh - ty) / (H * z)];
+  const mx = CROP_MARGIN * (dx1 - dx0), my = CROP_MARGIN * (dy1 - dy0);
+  const [a, b] = [TO_SOURCE[turns]([dx0 - mx, dy0 - my]), TO_SOURCE[turns]([dx1 + mx, dy1 + my])];
+  const box = [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
+  return box.map((v) => clamp(v, 0, 1));
+}
 
 export function frameOnCard(corners) {
   if (!corners || !video.videoWidth) return;

@@ -132,3 +132,20 @@ def test_the_french_poison_counter_is_identified():
     best = catalog.card_info(rec.best.card_id)
     assert rec.ok and rec.lang == "fr" and (best["name"], best["set_code"]) == ("Poison Counter", "tmbs")
     con.close()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not DB_PATH.exists(), reason="base non importée")
+def test_a_sideways_card_cut_in_half_by_its_contour_is_found_by_its_text():
+    """Carte noire couchée dans la boîte : le contour retenu s'arrête entre l'illustration et la boîte de texte. Le
+    texte, vertical dans l'image, n'est lisible qu'une fois l'image remise droite."""
+    from magicscanner import db
+    from magicscanner.catalog import Catalog
+    from magicscanner.recognition import Recognizer
+
+    con = db.connect()
+    catalog = Catalog(con)
+    rec = Recognizer(catalog).recognize(cv2.imread(str(FIXTURES / "dirty_wererat_half_contour_failed.jpg")),
+                                        orientation="landscape")
+    assert rec.ok and catalog.card_info(rec.best.card_id)["name"] == "Dirty Wererat"
+    con.close()

@@ -27,6 +27,7 @@ from ..config import (
     ensure_dirs,
 )
 from ..recognition import Candidate, Recognizer, detect
+from ..recognition.recognizer import NAME_SURE
 
 STATIC = Path(__file__).parent / "static"
 Image = Annotated[UploadFile, File()]
@@ -94,6 +95,8 @@ def _card(card_id: str, lang: str | None = None, candidate: Candidate | None = N
 def _review_reason(rec) -> str | None:
     if rec.off_set:
         return "hors de l'édition fixée"
+    if rec.name_score < NAME_SURE:
+        return "nom mal lu, carte approchante"
     if rec.confidence < LOW_CONFIDENCE:
         return "confiance faible"
     if rec.ambiguous:
@@ -127,6 +130,23 @@ async def _decode(image: UploadFile) -> np.ndarray:
     return frame
 
 
+MIN_CROP_PX = 200   # zone recadrée plus petite que ça : on garde l'image entière
+
+
+def _crop(frame: np.ndarray, value: str) -> tuple[np.ndarray, tuple[int, int]]:
+    """Zone à analyser envoyée par l'interface (« x0,y0,x1,y1 » en fractions de l'image : ce que montre l'aperçu
+    zoomé, plus une marge) et décalage de son coin haut-gauche. Valeur absente ou invalide : l'image entière."""
+    try:
+        x0, y0, x1, y1 = (min(1.0, max(0.0, float(v))) for v in value.split(","))
+    except ValueError:
+        return frame, (0, 0)
+    h, w = frame.shape[:2]
+    left, top, right, bottom = round(x0 * w), round(y0 * h), round(x1 * w), round(y1 * h)
+    if right - left < MIN_CROP_PX or bottom - top < MIN_CROP_PX:
+        return frame, (0, 0)
+    return frame[top:bottom, left:right], (left, top)
+
+
 def _orientation(value: str) -> str | None:
     """Sens de la carte envoyé par l'interface ; toute autre valeur : inconnu (les deux sens sont cherchés)."""
     return value if value in ("portrait", "landscape") else None
@@ -142,16 +162,17 @@ def index():
 @app.post("/api/scan")
 async def scan(image: Image, foil: bool = Form(False),
                price: float = Form(DEFAULT_PRICE, ge=MIN_PRICE), locked_set: str = Form(""),
-               orientation: str = Form("")):
+               orientation: str = Form(""), crop: str = Form("")):
     """Reconnaît la carte et l'ajoute immédiatement au stock (annulable). `locked_set` : édition fixée (paquet d'une
-    seule édition), vide pour toutes."""
-    frame = await _decode(image)
+    seule édition), vide pour toutes. `crop` : zone de l'image à analyser (aperçu zoomé), vide pour l'image entière."""
+    frame, (dx, dy) = _crop(await _decode(image), crop)
     with svc.lock:
         rec = svc.recognizer.recognize(frame, previous_set=svc.previous_set, foil=foil, locked_set=locked_set or None,
                                      orientation=_orientation(orientation))
+        corners = [[x + dx, y + dy] for x, y in rec.corners] if rec.corners else None   # repère de l'image entière
         out = {
             "ok": rec.ok, "error": rec.error, "lang": rec.lang, "confidence": rec.confidence,
-            "title": rec.title, "ocr": rec.lines, "corners": rec.corners, "list_symbol": rec.list_symbol,
+            "title": rec.title, "ocr": rec.lines, "corners": corners, "list_symbol": rec.list_symbol,
             "warped": _jpeg_data_url(rec.warped) if rec.warped is not None else None,
         }
         if not rec.ok:

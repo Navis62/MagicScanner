@@ -3,7 +3,7 @@ import { api } from "./api.js";
 import { grabFrame, initCamera, isReady } from "./camera.js";
 import { $, store } from "./dom.js";
 import { initEdition, lockedSet } from "./edition.js";
-import { frameOnCard, initPreview, isDefaultZoom } from "./preview.js";
+import { cropArea, frameOnCard, initPreview, isDefaultZoom } from "./preview.js";
 import { sound } from "./sound.js";
 import { initTools, updateToExport } from "./tools.js";
 import * as view from "./view.js";
@@ -35,7 +35,7 @@ const scan = safe(async () => {
   busy = true;
   view.setStatus("Analyse…", "busy");
   try {
-    const r = await api.scan(await grabFrame(), foilOn(), price(), lockedSet());
+    const r = await api.scan(await grabFrame(), foilOn(), price(), lockedSet(), cropArea());
     view.showScanDebug(r.warped, r.ocr, r.list_symbol);
     if (r.corners && isDefaultZoom()) frameOnCard(r.corners);   // premier cadrage automatique
     if (!r.ok) {

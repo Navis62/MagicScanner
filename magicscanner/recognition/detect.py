@@ -11,7 +11,7 @@ MIN_DETAIL = 0.03  # part de pixels de contour à l'intérieur : une carte (illu
 EDGE_MARGIN = 3   # pixels (image réduite) : un quadrilatère qui touche le bord de l'image n'est pas la carte
 
 
-def _order(pts: np.ndarray) -> np.ndarray:
+def order(pts: np.ndarray) -> np.ndarray:
     """Coins dans l'ordre haut-gauche, haut-droit, bas-droit, bas-gauche."""
     pts = pts.reshape(4, 2).astype(np.float32)
     s, d = pts.sum(1), np.diff(pts, axis=1).ravel()
@@ -46,7 +46,7 @@ def _score(quad: np.ndarray, frame_shape: tuple[int, int]) -> float | None:
 
 def _has_detail(small: np.ndarray, quad: np.ndarray) -> bool:
     """La surface délimitée contient-elle un contenu de carte (et pas un fond uni) ?"""
-    gray = cv2.cvtColor(warp(small, _order(quad), 176), cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(warp(small, order(quad), 176), cv2.COLOR_BGR2GRAY)
     inner = gray[18:-18, 13:-13]   # sans la bordure
     return (cv2.Canny(cv2.GaussianBlur(inner, (3, 3), 0), 40, 120) > 0).mean() >= MIN_DETAIL
 
@@ -95,7 +95,7 @@ def _expand(gray: np.ndarray, quad: np.ndarray) -> np.ndarray:
     bordure : le contour le plus net est souvent l'intérieur du cadre (illustration + boîte de texte), aux proportions
     voisines d'une carte, et le titre reste dehors. Si l'extérieur est déjà le fond clair, le bord est trouvé tout de
     suite et rien ne change. Un côté sans bord net est placé d'après les proportions d'une carte."""
-    q = _order(quad)
+    q = order(quad)
     center = q.mean(0)
     short = min(np.linalg.norm(q[1] - q[0]), np.linalg.norm(q[3] - q[0]))
     reach = int(EXPAND_REACH * short)
@@ -121,7 +121,7 @@ def _check(gray: np.ndarray, q: np.ndarray, lines) -> np.ndarray | None:
     corners = [_intersect(lines[i - 1], lines[i]) for i in range(4)]
     if any(c is None for c in corners):
         return None
-    grown = _order(np.float32(corners))
+    grown = order(np.float32(corners))
     w, h = sorted(cv2.minAreaRect(grown)[1])
     if (h == 0 or abs(w / h - RATIO) / RATIO > EXPAND_RATIO or _score(grown, gray.shape[:2]) is None
             or cv2.contourArea(grown) < 0.9 * cv2.contourArea(q)):
@@ -207,7 +207,7 @@ def find_card(frame: np.ndarray, orientation: str | None = None) -> np.ndarray |
         best = card_rect.find_rect(small, orientation)
         if best is None or not _has_detail(small, best):
             return None
-    return _order(_expand(gray, best.astype(np.float32)) / scale)
+    return order(_expand(gray, best.astype(np.float32)) / scale)
 
 
 def _portrait(corners: np.ndarray) -> np.ndarray:

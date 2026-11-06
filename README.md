@@ -7,7 +7,7 @@ Scanner webcam de cartes Magic (communes / unco, VO ou VF, foil ou non, NM) puis
 | Étape | Outil |
 |---|---|
 | Capture | Webcam dans le navigateur (interface locale FastAPI) |
-| Détection + redressement de la carte | OpenCV (contour du bord noir, agrandi jusqu'au bord extérieur sur les cartes noires, perspective -> 630×880) ; si le bord se fond dans l'ombre, la carte est retrouvée par son texte (titre + ligne du bas lus sur l'image entière) |
+| Détection + redressement de la carte | OpenCV (contour du bord noir, agrandi jusqu'au bord extérieur sur les cartes noires, perspective -> 630×880) ; si le bord se fond dans l'ombre, la carte est retrouvée par son texte (titre + ligne du bas lus sur l'image entière, remise droite si la carte est couchée) |
 | Lecture du nom / numéro / code d'édition | [RapidOCR](https://github.com/RapidAI/RapidOCR) (PaddleOCR en ONNX, gère les accents) |
 | Identification | Recherche floue du nom VO **et** VF dans la base Scryfall (`all_cards`), puis choix de l'impression : symbole d'édition + cadre (comparaison avec les images Scryfall), numéro de collection, code d'édition (cadres récents), cohérence de langue |
 | Référentiel Cardmarket | Fichiers publics `products_singles` et `price_guide` (S3 Cardmarket) + slugs officiels des extensions lus sur cardmarket.com |
@@ -40,7 +40,8 @@ magicscanner serve
 Ouvre http://127.0.0.1:8765. Choisir la webcam (la caméra virtuelle Elgato est écartée par défaut).
 Sous l'aperçu : zoom, « Cadrer », ↻ (tourne l'aperçu de 90°), « Autofocus » (relance la mise au point), « Figer le focus »
 (la verrouille) et « Relancer » (le flux). Dans l'aperçu : molette = zoom, glisser = déplacer la vue, clic = centrer ici.
-Zoom, position et rotation ne changent que l'affichage : la reconnaissance reçoit toujours l'image entière.
+Zoomé, seule la zone affichée (plus une marge) est analysée : le tapis, la boîte et les cartes voisines ne gênent plus
+la détection. Sans zoom, la reconnaissance reçoit l'image entière.
 
 **Carte en paysage** : poser la carte couchée, **titre vers la gauche de l'image**, et mettre l'aperçu à 90° (↻). La
 rotation indique aussi au serveur le sens attendu de la carte (détection plus rapide et plus fiable) ; titre à droite,

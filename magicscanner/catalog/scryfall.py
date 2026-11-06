@@ -25,6 +25,11 @@ log = logging.getLogger(__name__)
 SKIP_LAYOUTS = {"vanguard", "planar", "scheme", "reversible_card"}
 SAME_SIDE_LAYOUTS = {"split", "fuse", "aftermath", "flip"}
 SKIP_SET_TYPES = {"memorabilia", "minigame", "alchemy", "vanguard", "treasure_chest"}
+# Noms imprimés faux chez Scryfall (édition, numéro, langue) -> nom réellement imprimé sur la carte. Sans le bon nom, le
+# titre lu ne correspond qu'à peu près à d'autres cartes, et l'une d'elles est retenue à tort.
+PRINTED_NAME_FIXES = {
+    ("ody", "168", "fr"): "Assassin zombie",   # Scryfall : « zombie et assassin » (la ligne de type)
+}
 CARD_COLUMNS = ("id", "oracle_id", "name", "front_name", "set_code", "collector_number", "rarity", "cardmarket_id",
                 "image_normal", "image_small", "released_at", "layout", "frame", "promo", "set_type",
                 "finishes", "promo_types", "power", "toughness", "colors", "type_line", "artist")
@@ -170,6 +175,8 @@ def import_cards(con: sqlite3.Connection, path: Path) -> None:
             names.add((oracle_id, "en", _front(c, "name")))
             names.update((oracle_id, "en", n) for n in _other_faces(c, "name"))
         else:
+            if fix := PRINTED_NAME_FIXES.get((*key, c["lang"])):
+                c["printed_name"] = fix
             printed = c.get("printed_name") or " // ".join(f.get("printed_name", "") for f in c.get("card_faces", [])) or None
             front = _front(c, "printed_name")
             localized.append((c["id"], c["lang"], oracle_id, c["set"], c["collector_number"], printed, front, _image(c, "normal")))

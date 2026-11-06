@@ -10,13 +10,14 @@ async function request(url, options = {}) {
   return r.json();
 }
 
-const postImage = (url, blob, foil = false, price = 0.18, lockedSet = "") => {
+const postImage = (url, blob, foil = false, price = 0.18, lockedSet = "", crop = null) => {
   const body = new FormData();
   body.append("image", blob, "frame.jpg");
   body.append("foil", foil);
   body.append("price", price);
   body.append("locked_set", lockedSet);
   body.append("orientation", orientation());
+  if (crop) body.append("crop", crop.join(","));
   return request(url, { method: "POST", body });
 };
 
@@ -24,7 +25,7 @@ const postJson = (url, data) =>
   request(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
 
 export const api = {
-  scan: (blob, foil, price, lockedSet) => postImage("/api/scan", blob, foil, price, lockedSet),
+  scan: (blob, foil, price, lockedSet, crop) => postImage("/api/scan", blob, foil, price, lockedSet, crop),
   detect: (blob) => postImage("/api/detect", blob),
   undo: () => request("/api/undo", { method: "POST" }),
   reassign: (scanId, cardId, lang, foil = null, price = null) =>

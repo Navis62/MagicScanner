@@ -19,6 +19,7 @@ SIDEWAYS_MIN = 88       # score minimal d'un nom trouvé dans la lecture de côt
 AMBIGUOUS_GAP = 0.15  # deux premières impressions plus proches que ça ET vendues dans des produits différents
 OFF_SET_MARGIN = 8     # édition fixée : un nom hors édition ne l'emporte que s'il est lu nettement mieux
 MISFRAMED_MAX_Y = 0.6  # nom lu au-dessus de ça (hors bandeau du titre) : la zone redressée déborde de la carte
+NAME_SURE = 85         # nom lu moins bien que ça : la carte retenue n'est qu'un nom approchant, à vérifier
 OCR_MAX_HEIGHT = 1760  # l'OCR lit la carte à sa résolution d'origine (jusqu'à 2x 880 px) : titres plus nets
 
 
@@ -28,6 +29,7 @@ class Recognition:
     error: str | None = None
     lang: str | None = None
     confidence: float = 0.0
+    name_score: float = 0.0    # ressemblance (0-100) entre le titre lu et le nom retenu
     title: str | None = None
     lines: list[str] = field(default_factory=list)
     candidates: list[Candidate] = field(default_factory=list)  # triés, le premier est retenu
@@ -143,15 +145,22 @@ class Recognizer:
                 if (corners := ocr.card_from_title(title, footer)) is not None:
                     yield corners
 
-    def _relocate(self, frame: np.ndarray, corners: np.ndarray | None, locked_set: str | None):
+    def _relocate(self, frame: np.ndarray, corners: np.ndarray | None, locked_set: str | None,
+                  orientation: str | None = None):
         """Positions possibles de la carte d'après son texte. D'abord dans la zone trouvée par les contours : trop large
-        (intérieur de la boîte), elle contient la carte, texte droit ; puis dans l'image entière, où le texte d'une
-        carte couchée est vertical et donc illisible."""
+        (intérieur de la boîte), elle contient la carte, texte droit ; puis dans l'image entière. Carte couchée (titre à
+        gauche) : l'image est d'abord remise droite d'un quart de tour, sinon son texte vertical est illisible."""
         if corners is not None:
             area = _ocr_warp(frame, corners)
             for located in self._locate_by_text(area, locked_set):
                 yield detect.unwarp(corners, area.shape[0], located)
-        yield from self._locate_by_text(frame, locked_set)
+        if orientation != "portrait":
+            h = frame.shape[0]
+            for located in self._locate_by_text(cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE), locked_set):
+                # (u, v) de l'image tournée -> (x, y) = (v, h - 1 - u) ; coins remis dans l'ordre de l'image d'origine
+                yield detect.order(np.float32([[v, h - 1 - u] for u, v in located]))
+        if orientation != "landscape":
+            yield from self._locate_by_text(frame, locked_set)
 
     def recognize(self, frame: np.ndarray, previous_set: str | None = None, foil: bool = False,
                   locked_set: str | None = None, orientation: str | None = None) -> Recognition:
@@ -166,7 +175,7 @@ class Recognizer:
             # Contour introuvable ou mal choisi (bord noir dans l'ombre, intérieur de la boîte) : on retrouve la carte
             # par son texte.
             first = None
-            for located in self._relocate(frame, corners, locked_set):
+            for located in self._relocate(frame, corners, locked_set, orientation):
                 attempt = self._read_card(_ocr_warp(frame, located), locked_set)
                 first = first or (attempt, located)
                 if attempt[3]:
@@ -187,6 +196,7 @@ class Recognizer:
 
         rec.list_symbol = round(list_symbol.symbol_score(card), 3)
         best_name = matches[0]
+        rec.name_score = best_name.score
         rec.lang = ocr.detect_language(lines) or best_name.lang
         near = [m for m in matches if m.score >= best_name.score - NAME_TIE_MARGIN]
         tied = [m for m in near if m.score == best_name.score]

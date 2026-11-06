@@ -108,9 +108,10 @@ def title_candidates(lines: list[OcrLine]) -> list[str]:
 def sideways_titles(lines: list[OcrLine], upright: list[OcrLine] = ()) -> list[str]:
     """Cartes à deux moitiés (split, aftermath…) : les noms sont imprimés tournés à 90° et n'importe où sur la carte.
     Sur l'image remise à l'endroit, on prend toutes les lignes courtes, de haut en bas. Les lignes déjà lues à
-    l'endroit (ligne de type « Éphémère », mots du texte) ne sont pas des noms tournés : on les écarte."""
-    seen = {l.text.lower() for l in upright}
-    short = sorted((l for l in lines if 3 <= len(l.text) <= 25 and l.score >= 0.5 and l.text.lower() not in seen
+    l'endroit (ligne de type « Éphémère », mots du texte) ne sont pas des noms tournés : on les écarte, même quand ils
+    n'en sont qu'un morceau (« zombie » de « Créature : zombie et assassin » ferait passer la carte pour un jeton)."""
+    seen = " | ".join(l.text.lower() for l in upright)
+    short = sorted((l for l in lines if 3 <= len(l.text) <= 25 and l.score >= 0.5 and l.text.lower().strip() not in seen
                     and not is_flavor(l.text)),
                    key=lambda l: (l.y, l.x))
     return [l.text for l in short[:12]]
