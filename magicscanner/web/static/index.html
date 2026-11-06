@@ -63,7 +63,8 @@
     </div>
     <div class="zoom">
       <label class="zoom-slider">Zoom <input type="range" id="zoom" min="1" max="5" step="0.1" value="1"></label>
-      <span id="zoom-val">1.0×</span>
+      <span class="zoom-side"><span id="zoom-val">1.0×</span>
+        <button id="cam-rotate" class="ghost rotate" title="Tourner l'aperçu de 90° (affichage seulement : l'image envoyée au scan ne change pas). Carte couchée titre à gauche : 90°">↻ <span id="rotate-val">0°</span></button></span>
       <div class="zoom-actions">
         <button id="zoom-card" class="ghost" title="Centrer et zoomer sur la dernière carte détectée">Cadrer</button>
         <button id="zoom-reset" class="ghost">Vue entière</button>

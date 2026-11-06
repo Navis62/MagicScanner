@@ -11,13 +11,20 @@ const CARD_FILL = 0.8;                             // la carte occupe ~80 % de l
 const MAX_ZOOM = 5;
 const WHEEL_STEP = 1.1;
 let view = { ...DEFAULT_VIEW, ...store.get("ms-view", {}) };
+// Rotation de l'aperçu en quarts de tour horaires (0-3) : une carte couchée dans l'image, titre à gauche, apparaît
+// droite avec 1. `view` est exprimé dans l'image tournée, telle qu'affichée.
+let turns = store.get("ms-rotation", 0) % 4;
+const sideways = () => turns % 2 === 1;
+// Point de l'image d'origine (fractions) -> point de l'image affichée.
+const TO_DISPLAY = [([x, y]) => [x, y], ([x, y]) => [1 - y, x], ([x, y]) => [1 - x, 1 - y], ([x, y]) => [y, 1 - x]];
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 /** À z = 1 l'image est affichée à la hauteur de la fenêtre : plus large qu'elle, on en voit la partie centrale. */
 function placement() {
   const vw = viewport.clientWidth, vh = viewport.clientHeight;
-  const aspect = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 16 / 9;
+  const native = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 16 / 9;
+  const aspect = sideways() ? 1 / native : native;     // proportions de l'image telle qu'affichée
   const W = vh * aspect, H = vh;                    // taille de l'image à z = 1, en pixels
   const z = clamp(view.z, 1, MAX_ZOOM);
   // coin haut-gauche de l'image : le point voulu au centre de la fenêtre, sans jamais laisser de bord vide
@@ -32,7 +39,12 @@ function apply(save = true) {
   view.z = p.z;
   view.cx = (p.vw / 2 - p.tx) / (p.W * p.z);        // centre réellement affiché (après recadrage dans l'image)
   view.cy = (p.vh / 2 - p.ty) / (p.H * p.z);
-  Object.assign(video.style, { width: `${p.W}px`, height: `${p.H}px`, transform: `translate(${p.tx}px, ${p.ty}px) scale(${p.z})` });
+  // L'élément vidéo garde ses proportions d'origine (W et H échangés de côté) ; la rotation autour de l'origine le
+  // fait sortir de la fenêtre, la translation qui la précède l'y ramène.
+  const [ew, eh] = sideways() ? [p.H, p.W] : [p.W, p.H];
+  const back = [null, `${eh}px, 0`, `${ew}px, ${eh}px`, `0, ${ew}px`][turns];
+  const turn = turns ? ` translate(${back}) rotate(${90 * turns}deg)` : "";
+  Object.assign(video.style, { width: `${ew}px`, height: `${eh}px`, transform: `translate(${p.tx}px, ${p.ty}px) scale(${p.z})${turn}` });
   $("zoom").value = view.z;
   $("zoom-val").textContent = view.z.toFixed(1) + "×";
   if (save) store.set("ms-view", view);
@@ -43,7 +55,8 @@ export const isDefaultZoom = () => view.z === 1;
 export function frameOnCard(corners) {
   if (!corners || !video.videoWidth) return;
   const { vw, vh, W, H } = placement();
-  const xs = corners.map((p) => p[0] / video.videoWidth), ys = corners.map((p) => p[1] / video.videoHeight);
+  const pts = corners.map(([x, y]) => TO_DISPLAY[turns]([x / video.videoWidth, y / video.videoHeight]));
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
   const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
   view = {
     z: Math.min((CARD_FILL * vw) / ((x1 - x0) * W), (CARD_FILL * vh) / ((y1 - y0) * H)),
@@ -93,4 +106,15 @@ export function initPreview() {
   slider.addEventListener("change", () => slider.blur());   // Espace doit rester au scan
   $("zoom-card").addEventListener("click", frameOnDetectedCard);
   $("zoom-reset").addEventListener("click", () => { view = { ...DEFAULT_VIEW }; apply(); });
+  const rotate = $("cam-rotate");
+  const showTurns = () => { $("rotate-val").textContent = `${90 * turns}°`; rotate.classList.toggle("active", turns > 0); };
+  showTurns();
+  rotate.addEventListener("click", () => {
+    turns = (turns + 1) % 4;
+    store.set("ms-rotation", turns);
+    showTurns();
+    view = { ...DEFAULT_VIEW };                     // le cadrage précédent était exprimé dans l'autre orientation
+    apply();
+    rotate.blur();                                  // Espace doit rester au scan
+  });
 }

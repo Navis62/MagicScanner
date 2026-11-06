@@ -18,6 +18,7 @@ SIDEWAYS_BELOW = 85     # nom lu moins bien que ça : on relit la carte de côt�
 SIDEWAYS_MIN = 88       # score minimal d'un nom trouvé dans la lecture de côté (lignes quelconques : plus strict)
 AMBIGUOUS_GAP = 0.15  # deux premières impressions plus proches que ça ET vendues dans des produits différents
 OFF_SET_MARGIN = 8     # édition fixée : un nom hors édition ne l'emporte que s'il est lu nettement mieux
+OCR_MAX_HEIGHT = 1760  # l'OCR lit la carte à sa résolution d'origine (jusqu'à 2x 880 px) : titres plus nets
 
 
 @dataclass
@@ -54,6 +55,13 @@ def _ambiguous(candidates: list[Candidate]) -> bool:
         return False
     first, second = candidates[0], candidates[1]
     return first.score - second.score < AMBIGUOUS_GAP and first.cardmarket_id != second.cardmarket_id
+
+
+def _ocr_warp(frame: np.ndarray, corners: np.ndarray) -> np.ndarray:
+    """Carte redressée pour l'OCR, sans réduire sa résolution d'origine (le titre d'une carte noire, gris clair sur
+    fond sombre, devient illisible sous ~15 px de haut)."""
+    height = min(max(detect.native_height(corners), detect.CARD_H), OCR_MAX_HEIGHT)
+    return detect.warp(frame, corners, height)
 
 
 class Recognizer:
@@ -128,14 +136,15 @@ class Recognizer:
                   locked_set: str | None = None) -> Recognition:
         """`locked_set` : édition fixée (paquet d'une seule édition) ; seules ses impressions sont envisagées, sauf si la
         carte n'en fait manifestement pas partie."""
-        card, corners = detect.extract(frame)
-        if card is not None:
-            card, lines, titles, matches = self._read_card(card, locked_set)
+        corners = detect.find_card(frame)
+        card = None
+        if corners is not None:
+            card, lines, titles, matches = self._read_card(_ocr_warp(frame, corners), locked_set)
         if card is None or not matches:
             # Contour introuvable ou mal choisi (bord noir dans l'ombre) : on retrouve la carte par son texte.
             first = None
             for located in self._locate_by_text(frame, locked_set):
-                attempt = self._read_card(detect.warp(frame, located), locked_set)
+                attempt = self._read_card(_ocr_warp(frame, located), locked_set)
                 first = first or (attempt, located)
                 if attempt[3]:
                     (card, lines, titles, matches), corners = attempt, located
@@ -145,6 +154,8 @@ class Recognizer:
                     (card, lines, titles, matches), corners = first
         if card is None:
             return Recognition(False, "Carte non détectée : vérifie le cadrage / l'éclairage")
+        # Comparaison visuelle, symbole The List et image renvoyée : taille de référence.
+        card = cv2.resize(card, (detect.CARD_W, detect.CARD_H), interpolation=cv2.INTER_AREA)
         rec = Recognition(False, warped=card, corners=corners.tolist(), lines=[l.text for l in lines],
                           title=titles[0] if titles else None)
         if not matches:

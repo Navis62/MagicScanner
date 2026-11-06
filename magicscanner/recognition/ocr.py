@@ -6,7 +6,6 @@ from dataclasses import dataclass
 import numpy as np
 from rapidocr import RapidOCR
 
-from .detect import CARD_H, CARD_W
 
 FR_WORDS = {"le", "la", "les", "de", "des", "du", "vous", "une", "un", "et", "chaque", "cible", "carte", "créature",
             "éphémère", "rituel", "terrain", "enchantement", "artefact", "jusqu'à", "contrôlez", "champ", "bataille"}
@@ -44,10 +43,12 @@ class OcrEngine:
         self._engine = RapidOCR()
 
     def read(self, card: np.ndarray) -> list[OcrLine]:
+        """Positions en fraction de l'image lue (quelle que soit sa résolution)."""
         res = self._engine(card)
         if res.txts is None:
             return []
-        return [OcrLine(t, float(s), float(b[0][0]) / CARD_W, float(b[0][1]) / CARD_H)
+        h, w = card.shape[:2]
+        return [OcrLine(t, float(s), float(b[0][0]) / w, float(b[0][1]) / h)
                 for b, t, s in zip(res.boxes, res.txts, res.scores, strict=True)]
 
     def read_pixels(self, frame: np.ndarray) -> list[PixelLine]:

@@ -111,21 +111,25 @@ def _best_aligned(edges: np.ndarray):
 
 
 def find_rect(small_bgr: np.ndarray) -> np.ndarray | None:
-    """Coins (haut-gauche, haut-droit, bas-droit, bas-gauche) de la carte dans l'image réduite, ou None."""
+    """Coins de la carte (portrait ou paysage) dans l'image réduite, ou None."""
     gray = cv2.GaussianBlur(cv2.cvtColor(small_bgr, cv2.COLOR_BGR2GRAY), (5, 5), 0)
     edges = cv2.Canny(gray, *CANNY)
     h, w = edges.shape
-    best = (0.0, None, None, 0)
+    best = (0.0, None, 0)
     for angle in ANGLES:
         m = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
         rotated = cv2.warpAffine(edges, m, (w, h), flags=cv2.INTER_NEAREST)
-        score, rect, sides = _best_aligned(rotated)
+        score, rect, _ = _best_aligned(rotated)
         if score > best[0]:
-            best = (score, rect, sides, angle)
-    _, rect, _, angle = best
-    if rect is None:
+            xa, y1, xb, y2 = rect
+            best = (score, np.float32([[xa, y1], [xb, y1], [xb, y2], [xa, y2]]), angle)
+        # Carte couchée (paysage) : la recherche se fait en portrait sur l'image transposée, puis x et y sont rééchangés.
+        score, rect, _ = _best_aligned(np.ascontiguousarray(rotated.T))
+        if score > best[0]:
+            ya, x1, yb, x2 = rect
+            best = (score, np.float32([[x1, ya], [x2, ya], [x2, yb], [x1, yb]]), angle)
+    _, corners, angle = best
+    if corners is None:
         return None
-    xa, y1, xb, y2 = rect
     back = cv2.invertAffineTransform(cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0))
-    corners = np.float32([[xa, y1], [xb, y1], [xb, y2], [xa, y2]])
     return (np.hstack([corners, np.ones((4, 1), np.float32)]) @ back.T).astype(np.float32)
