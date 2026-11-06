@@ -6,7 +6,6 @@ from dataclasses import dataclass
 import numpy as np
 from rapidocr import RapidOCR
 
-
 FR_WORDS = {"le", "la", "les", "de", "des", "du", "vous", "une", "un", "et", "chaque", "cible", "carte", "créature",
             "éphémère", "rituel", "terrain", "enchantement", "artefact", "jusqu'à", "contrôlez", "champ", "bataille"}
 EN_WORDS = {"the", "you", "of", "a", "an", "and", "each", "target", "card", "creature", "instant", "sorcery", "land",

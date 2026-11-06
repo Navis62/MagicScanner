@@ -90,7 +90,7 @@ ORDERED_SETS = {"fbb"}
 LINKED_SETS = {"plst": LIST_EXPANSIONS, "fbb": (57,), "ren": (60,), "psal": (105,)}
 
 
-TOKEN_SUFFIX = re.compile(r"\s+Token\b(\s*\([^)]*\))?\s*$", re.I)   # « Kor Soldier Token (White 1/1) » -> « Kor Soldier »
+TOKEN_SUFFIX = re.compile(r"\s+Token\b(\s*\([^)]*\))?\s*$", re.IGNORECASE)   # « Kor Soldier Token (White 1/1) » -> « Kor Soldier »
 
 
 def _token_sets(con: sqlite3.Connection) -> dict[str, tuple[int, ...]]:

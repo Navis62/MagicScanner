@@ -6,6 +6,7 @@ import time
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Annotated
 
 import cv2
 import httpx
@@ -28,6 +29,7 @@ from ..config import (
 from ..recognition import Candidate, Recognizer, detect
 
 STATIC = Path(__file__).parent / "static"
+Image = Annotated[UploadFile, File()]
 MAX_ALTERNATIVES = 11
 
 
@@ -138,7 +140,7 @@ def index():
 
 
 @app.post("/api/scan")
-async def scan(image: UploadFile = File(...), foil: bool = Form(False),
+async def scan(image: Image, foil: bool = Form(False),
                price: float = Form(DEFAULT_PRICE, ge=MIN_PRICE), locked_set: str = Form(""),
                orientation: str = Form("")):
     """Reconnaît la carte et l'ajoute immédiatement au stock (annulable). `locked_set` : édition fixée (paquet d'une
@@ -173,7 +175,7 @@ async def scan(image: UploadFile = File(...), foil: bool = Form(False),
 
 
 @app.post("/api/detect")
-async def detect_card(image: UploadFile = File(...), orientation: str = Form("")):
+async def detect_card(image: Image, orientation: str = Form("")):
     """Localise la carte sans la reconnaître ni l'ajouter (cadrage de l'aperçu)."""
     corners = detect.find_card(await _decode(image), _orientation(orientation))
     return {"corners": corners.tolist() if corners is not None else None}

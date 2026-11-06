@@ -56,7 +56,7 @@ def _show(ctx, page: Page) -> None:
         cdp.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {
             "left": WINDOW[0], "top": WINDOW[1], "width": WINDOW[2], "height": WINDOW[3]}})
         page.bring_to_front()
-    except Exception as e:  # confort uniquement
+    except Exception as e:  # noqa: BLE001 — confort uniquement
         log.warning("redimensionnement de Chrome impossible : %s", e)
 
 

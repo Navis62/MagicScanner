@@ -59,7 +59,7 @@ def test_a_clear_winner_is_not_ambiguous():
 
 
 def test_a_foil_scan_prefers_a_printing_that_exists_in_foil(same_frame_printings):
-    rows, evidence = same_frame_printings
+    rows, _ = same_frame_printings
     scan = np.full((880, 630, 3), 90, np.uint8)
     foil = Evidence(lang="en", collector=CollectorInfo(), name_scores={"o-speed": 100}, fr_sets=set(), foil=True)
     assert score_printing(scan, rows["surge"], foil).score == score_printing(scan, rows["normal"], foil).score

@@ -32,7 +32,7 @@ def test_export_everything_does_not_mark_and_skips_unknown_ids(con):
     con.execute("UPDATE cards SET cardmarket_id = NULL WHERE id='plains-1'")
     inventory.add_scan(con, "grave-dka", "fr", 0.9, "")
     inventory.add_scan(con, "plains-1", "en", 0.9, "")
-    content, lines, skipped = powertools.build(con, everything=True)
+    _, lines, skipped = powertools.build(con, everything=True)
     assert (lines, skipped) == (1, 1)
     assert inventory.stats(con)["to_export"] == 2
 

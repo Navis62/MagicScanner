@@ -160,17 +160,16 @@ def _one_missing(gray, q, normals, lines):
     missing = [i for i, l in enumerate(lines) if l is None]
     if len(missing) != 1:
         return None
+    i = missing[0]
+    opp, s1, s3 = lines[(i + 2) % 4], lines[(i + 1) % 4], lines[(i + 3) % 4]
+    c1, c3 = _intersect(s1, opp), _intersect(s3, opp)
+    if c1 is None or c3 is None:
+        return None
+    along = float(np.linalg.norm(c1 - c3))                                      # longueur du côté opposé
+    long_side = np.linalg.norm(q[(i + 1) % 4] - q[i]) > np.linalg.norm(q[(i + 2) % 4] - q[(i + 1) % 4])
+    gap = along * RATIO if long_side else along / RATIO
     lines = list(lines)
-    for i in missing:
-        # Côté sans bord net : parallèle à l'opposé, à la distance que donnent les proportions d'une carte.
-        opp, s1, s3 = lines[(i + 2) % 4], lines[(i + 1) % 4], lines[(i + 3) % 4]
-        c1, c3 = _intersect(s1, opp), _intersect(s3, opp)
-        if c1 is None or c3 is None:
-            return None
-        along = float(np.linalg.norm(c1 - c3))                                  # longueur du côté opposé
-        long_side = np.linalg.norm(q[(i + 1) % 4] - q[i]) > np.linalg.norm(q[(i + 2) % 4] - q[(i + 1) % 4])
-        gap = along * RATIO if long_side else along / RATIO
-        lines[i] = ((c1 + c3) / 2 - gap * normals[(i + 2) % 4], opp[1])
+    lines[i] = ((c1 + c3) / 2 - gap * normals[(i + 2) % 4], opp[1])
     return _check(gray, q, lines)
 
 
@@ -226,19 +225,22 @@ def native_height(corners: np.ndarray) -> int:
     return int(max(np.linalg.norm(bl - tl), np.linalg.norm(br - tr)))
 
 
+def _target(height: int) -> tuple[np.ndarray, int]:
+    """Coins et largeur de la carte redressée en portrait, `height` pixels de haut."""
+    width = round(height * CARD_W / CARD_H)
+    return np.array([[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]], dtype=np.float32), width
+
+
 def warp(frame: np.ndarray, corners: np.ndarray, height: int = CARD_H) -> np.ndarray:
     """Carte redressée en portrait, `height` pixels de haut (630x880 par défaut)."""
-    width = round(height * CARD_W / CARD_H)
-    dst = np.array([[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]], dtype=np.float32)
+    dst, width = _target(height)
     m = cv2.getPerspectiveTransform(_portrait(corners), dst)
     return cv2.warpPerspective(frame, m, (width, height))
 
 
 def unwarp(corners: np.ndarray, height: int, points: np.ndarray) -> np.ndarray:
     """Points de la carte redressée par `warp(frame, corners, height)` -> points de l'image d'origine."""
-    width = round(height * CARD_W / CARD_H)
-    dst = np.array([[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]], dtype=np.float32)
-    m = cv2.getPerspectiveTransform(dst, _portrait(corners))
+    m = cv2.getPerspectiveTransform(_target(height)[0], _portrait(corners))
     return cv2.perspectiveTransform(np.float32(points).reshape(-1, 1, 2), m).reshape(-1, 2)
 
 

@@ -45,14 +45,14 @@ async function start(deviceId) {
   }
 }
 
-export function restart(reason) {
+function restart(reason) {
   setStatus(`Caméra : ${reason}, relance…`, "busy");
   start(select.value);
 }
 
 /** Relance la mise au point : un autofocus ponctuel si la caméra le permet, sinon on sort du mode continu et on y
  * revient ; à défaut de réglage de focus, on relance le flux. */
-export async function refocus() {
+async function refocus() {
   const track = video.srcObject?.getVideoTracks()[0];
   const modes = track?.getCapabilities?.().focusMode;
   if (!modes?.length) return restart("pas de réglage de focus, relance du flux");
