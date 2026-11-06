@@ -1,4 +1,9 @@
 // Appels à l'API du serveur local.
+import { store } from "./dom.js";
+
+/** Orientation de la carte dans l'image, d'après la rotation choisie pour l'aperçu (quarts de tour, preview.js) :
+ * aperçu tourné de 90° ou 270° = carte couchée. Le serveur ne cherche alors la carte que dans ce sens. */
+const orientation = () => (store.get("ms-rotation", 0) % 2 ? "landscape" : "portrait");
 async function request(url, options = {}) {
   const r = await fetch(url, options);
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
@@ -11,6 +16,7 @@ const postImage = (url, blob, foil = false, price = 0.18, lockedSet = "") => {
   body.append("foil", foil);
   body.append("price", price);
   body.append("locked_set", lockedSet);
+  body.append("orientation", orientation());
   return request(url, { method: "POST", body });
 };
 

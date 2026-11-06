@@ -18,6 +18,7 @@ SIDEWAYS_BELOW = 85     # nom lu moins bien que ça : on relit la carte de côt�
 SIDEWAYS_MIN = 88       # score minimal d'un nom trouvé dans la lecture de côté (lignes quelconques : plus strict)
 AMBIGUOUS_GAP = 0.15  # deux premières impressions plus proches que ça ET vendues dans des produits différents
 OFF_SET_MARGIN = 8     # édition fixée : un nom hors édition ne l'emporte que s'il est lu nettement mieux
+MISFRAMED_MAX_Y = 0.6  # nom lu au-dessus de ça (hors bandeau du titre) : la zone redressée déborde de la carte
 OCR_MAX_HEIGHT = 1760  # l'OCR lit la carte à sa résolution d'origine (jusqu'à 2x 880 px) : titres plus nets
 
 
@@ -82,6 +83,14 @@ class Recognizer:
             return in_set
         return found
 
+    def _misframed(self, lines: list[ocr.OcrLine], locked_set: str | None) -> bool:
+        """Un nom de carte bien lu ailleurs que dans le bandeau du titre, dans la moitié haute : la zone redressée est
+        plus large que la carte (intérieur de la boîte). Les relectures à 180° et de côté n'y changeraient rien.
+        (Une carte à l'envers a son titre en bas : elle garde sa relecture à 180°.)"""
+        return any(l.y < MISFRAMED_MAX_Y and len(l.text) >= 4 and not ocr.is_flavor(l.text)
+                   and (m := self._match_names([l.text], locked_set)) and m[0].score >= TITLE_FOUND
+                   for l in lines)
+
     def _read_card(self, card: np.ndarray, locked_set: str | None = None
                    ) -> tuple[np.ndarray, list[ocr.OcrLine], list[str], list[NameMatch]]:
         """OCR + nom ; si rien ne correspond, la carte est peut-être à l'envers : on retourne et on relit."""
@@ -94,6 +103,8 @@ class Recognizer:
             if len(titles) > 1 and (not matches or matches[0].score < SIDEWAYS_BELOW):
                 matches = self._match_names(titles, locked_set) or matches
             attempt = attempt if attempt and not matches else (img, lines, titles, matches)
+            if not matches and img is card and self._misframed(lines, locked_set):
+                return attempt   # ni retournée ni à deux moitiés : mal cadrée, le recalage par le texte s'en charge
             if matches:
                 if matches[0].score >= SIDEWAYS_BELOW:
                     return attempt
@@ -132,18 +143,30 @@ class Recognizer:
                 if (corners := ocr.card_from_title(title, footer)) is not None:
                     yield corners
 
+    def _relocate(self, frame: np.ndarray, corners: np.ndarray | None, locked_set: str | None):
+        """Positions possibles de la carte d'après son texte. D'abord dans la zone trouvée par les contours : trop large
+        (intérieur de la boîte), elle contient la carte, texte droit ; puis dans l'image entière, où le texte d'une
+        carte couchée est vertical et donc illisible."""
+        if corners is not None:
+            area = _ocr_warp(frame, corners)
+            for located in self._locate_by_text(area, locked_set):
+                yield detect.unwarp(corners, area.shape[0], located)
+        yield from self._locate_by_text(frame, locked_set)
+
     def recognize(self, frame: np.ndarray, previous_set: str | None = None, foil: bool = False,
-                  locked_set: str | None = None) -> Recognition:
+                  locked_set: str | None = None, orientation: str | None = None) -> Recognition:
         """`locked_set` : édition fixée (paquet d'une seule édition) ; seules ses impressions sont envisagées, sauf si la
-        carte n'en fait manifestement pas partie."""
-        corners = detect.find_card(frame)
+        carte n'en fait manifestement pas partie. `orientation` : sens de la carte dans l'image ("portrait",
+        "landscape"), None si inconnu."""
+        corners = detect.find_card(frame, orientation)
         card = None
         if corners is not None:
             card, lines, titles, matches = self._read_card(_ocr_warp(frame, corners), locked_set)
         if card is None or not matches:
-            # Contour introuvable ou mal choisi (bord noir dans l'ombre) : on retrouve la carte par son texte.
+            # Contour introuvable ou mal choisi (bord noir dans l'ombre, intérieur de la boîte) : on retrouve la carte
+            # par son texte.
             first = None
-            for located in self._locate_by_text(frame, locked_set):
+            for located in self._relocate(frame, corners, locked_set):
                 attempt = self._read_card(_ocr_warp(frame, located), locked_set)
                 first = first or (attempt, located)
                 if attempt[3]:

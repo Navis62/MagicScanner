@@ -125,6 +125,11 @@ async def _decode(image: UploadFile) -> np.ndarray:
     return frame
 
 
+def _orientation(value: str) -> str | None:
+    """Sens de la carte envoyé par l'interface ; toute autre valeur : inconnu (les deux sens sont cherchés)."""
+    return value if value in ("portrait", "landscape") else None
+
+
 # --- Routes -------------------------------------------------------------------------------------------------
 
 @app.get("/")
@@ -134,12 +139,14 @@ def index():
 
 @app.post("/api/scan")
 async def scan(image: UploadFile = File(...), foil: bool = Form(False),
-               price: float = Form(DEFAULT_PRICE, ge=MIN_PRICE), locked_set: str = Form("")):
+               price: float = Form(DEFAULT_PRICE, ge=MIN_PRICE), locked_set: str = Form(""),
+               orientation: str = Form("")):
     """Reconnaît la carte et l'ajoute immédiatement au stock (annulable). `locked_set` : édition fixée (paquet d'une
     seule édition), vide pour toutes."""
     frame = await _decode(image)
     with svc.lock:
-        rec = svc.recognizer.recognize(frame, previous_set=svc.previous_set, foil=foil, locked_set=locked_set or None)
+        rec = svc.recognizer.recognize(frame, previous_set=svc.previous_set, foil=foil, locked_set=locked_set or None,
+                                     orientation=_orientation(orientation))
         out = {
             "ok": rec.ok, "error": rec.error, "lang": rec.lang, "confidence": rec.confidence,
             "title": rec.title, "ocr": rec.lines, "corners": rec.corners, "list_symbol": rec.list_symbol,
@@ -166,9 +173,9 @@ async def scan(image: UploadFile = File(...), foil: bool = Form(False),
 
 
 @app.post("/api/detect")
-async def detect_card(image: UploadFile = File(...)):
+async def detect_card(image: UploadFile = File(...), orientation: str = Form("")):
     """Localise la carte sans la reconnaître ni l'ajouter (cadrage de l'aperçu)."""
-    corners = detect.find_card(await _decode(image))
+    corners = detect.find_card(await _decode(image), _orientation(orientation))
     return {"corners": corners.tolist() if corners is not None else None}
 
 

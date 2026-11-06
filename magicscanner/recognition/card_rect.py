@@ -102,16 +102,18 @@ def _best_aligned(edges: np.ndarray):
             height = y2 - y1
             if height < MIN_HEIGHT * h:
                 continue
-            for width in range(int(height * RATIO * (1 - DELTA)), int(height * RATIO * (1 + DELTA)) + 1, 2):
-                xa = np.arange(0, w - width)
-                if len(xa) == 0:
-                    continue
-                consider(xa, xa + width, np.full(len(xa), y1), np.full(len(xa), y2))
+            # Toutes les largeurs plausibles × toutes les positions à gauche, en un seul appel.
+            widths = np.arange(int(height * RATIO * (1 - DELTA)), int(height * RATIO * (1 + DELTA)) + 1, 2)
+            xa, width = np.meshgrid(np.arange(w), widths)
+            ok = xa + width < w
+            xa, width = xa[ok], width[ok]
+            consider(xa, xa + width, np.full(len(xa), y1), np.full(len(xa), y2))
     return best
 
 
-def find_rect(small_bgr: np.ndarray) -> np.ndarray | None:
-    """Coins de la carte (portrait ou paysage) dans l'image réduite, ou None."""
+def find_rect(small_bgr: np.ndarray, orientation: str | None = None) -> np.ndarray | None:
+    """Coins de la carte dans l'image réduite, ou None. `orientation` : "portrait" (carte droite), "landscape" (carte
+    couchée) ou None (les deux : deux fois plus long, et un rectangle couché parasite peut l'emporter)."""
     gray = cv2.GaussianBlur(cv2.cvtColor(small_bgr, cv2.COLOR_BGR2GRAY), (5, 5), 0)
     edges = cv2.Canny(gray, *CANNY)
     h, w = edges.shape
@@ -119,11 +121,13 @@ def find_rect(small_bgr: np.ndarray) -> np.ndarray | None:
     for angle in ANGLES:
         m = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
         rotated = cv2.warpAffine(edges, m, (w, h), flags=cv2.INTER_NEAREST)
-        score, rect, _ = _best_aligned(rotated)
+        score, rect, _ = _best_aligned(rotated) if orientation != "landscape" else (0.0, None, None)
         if score > best[0]:
             xa, y1, xb, y2 = rect
             best = (score, np.float32([[xa, y1], [xb, y1], [xb, y2], [xa, y2]]), angle)
         # Carte couchée (paysage) : la recherche se fait en portrait sur l'image transposée, puis x et y sont rééchangés.
+        if orientation == "portrait":
+            continue
         score, rect, _ = _best_aligned(np.ascontiguousarray(rotated.T))
         if score > best[0]:
             ya, x1, yb, x2 = rect

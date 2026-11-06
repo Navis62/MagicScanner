@@ -51,8 +51,9 @@ def _has_detail(small: np.ndarray, quad: np.ndarray) -> bool:
     return (cv2.Canny(cv2.GaussianBlur(inner, (3, 3), 0), 40, 120) > 0).mean() >= MIN_DETAIL
 
 
-def find_card(frame: np.ndarray) -> np.ndarray | None:
-    """Retourne les 4 coins (ordonnés) du meilleur candidat carte, ou None."""
+def find_card(frame: np.ndarray, orientation: str | None = None) -> np.ndarray | None:
+    """Retourne les 4 coins (ordonnés) du meilleur candidat carte, ou None. `orientation` ("portrait", "landscape" ou
+    None) : sens de la carte dans l'image, pour la recherche de secours."""
     h, w = frame.shape[:2]
     scale = 960 / max(h, w)
     small = cv2.resize(frame, None, fx=scale, fy=scale) if scale < 1 else frame.copy()
@@ -81,7 +82,7 @@ def find_card(frame: np.ndarray) -> np.ndarray | None:
     best = next((q for _, q in sorted(candidates, key=lambda c: -c[0]) if _has_detail(small, q)), None)
     if best is None:
         # Contours fusionnés avec la boîte ou la pile de cartes : on cherche plutôt un rectangle bien soutenu par des bords.
-        rect = card_rect.find_rect(small)
+        rect = card_rect.find_rect(small, orientation)
         return None if rect is None or not _has_detail(small, rect) else _order(rect / scale)
     return _order(best / scale)
 
@@ -109,8 +110,16 @@ def warp(frame: np.ndarray, corners: np.ndarray, height: int = CARD_H) -> np.nda
     return cv2.warpPerspective(frame, m, (width, height))
 
 
-def extract(frame: np.ndarray) -> tuple[np.ndarray | None, np.ndarray | None]:
-    corners = find_card(frame)
+def unwarp(corners: np.ndarray, height: int, points: np.ndarray) -> np.ndarray:
+    """Points de la carte redressée par `warp(frame, corners, height)` -> points de l'image d'origine."""
+    width = round(height * CARD_W / CARD_H)
+    dst = np.array([[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]], dtype=np.float32)
+    m = cv2.getPerspectiveTransform(dst, _portrait(corners))
+    return cv2.perspectiveTransform(np.float32(points).reshape(-1, 1, 2), m).reshape(-1, 2)
+
+
+def extract(frame: np.ndarray, orientation: str | None = None) -> tuple[np.ndarray | None, np.ndarray | None]:
+    corners = find_card(frame, orientation)
     if corners is None:
         return None, None
     return warp(frame, corners), corners
