@@ -148,11 +148,14 @@ main {
 .video-wrap {
   position: relative; overflow: hidden;
   aspect-ratio: 3 / 4; cursor: crosshair;   /* format portrait, comme la carte */
+  user-select: none; touch-action: none;    /* glisser pour déplacer l'aperçu, sans sélection ni défilement */
   background: #000; border-radius: 12px;
   box-shadow: 0 0 0 1px var(--line), 0 18px 36px -20px rgba(0, 0, 0, .9);
 }
 /* Taille et position calculées par preview.js (l'image est plus large que la fenêtre : on en voit le centre). */
 video { position: absolute; top: 0; left: 0; max-width: none; transform-origin: 0 0; }
+.video-wrap.dragging { cursor: grabbing; }
+.video-wrap.dragging video { pointer-events: none; }
 
 .corner { position: absolute; width: 26px; height: 26px; pointer-events: none; border: 0 solid var(--gold); opacity: .85; }
 .corner.tl { top: 12px; left: 12px; border-top-width: 3px; border-left-width: 3px; border-top-left-radius: 8px; }

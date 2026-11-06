@@ -10,6 +10,7 @@ const DEFAULT_VIEW = { z: 1, cx: 0.5, cy: 0.5 };   // zoom + point de l'image au
 const CARD_FILL = 0.8;                             // la carte occupe ~80 % de la fenêtre une fois cadrée
 const MAX_ZOOM = 5;
 const WHEEL_STEP = 1.1;
+const DRAG_THRESHOLD = 4;                          // pixels : en deçà, c'est un clic (recentrage), pas un glisser
 let view = { ...DEFAULT_VIEW, ...store.get("ms-view", {}) };
 // Rotation de l'aperçu en quarts de tour horaires (0-3) : une carte couchée dans l'image, titre à gauche, apparaît
 // droite avec 1. `view` est exprimé dans l'image tournée, telle qu'affichée.
@@ -93,7 +94,42 @@ export function initPreview() {
     apply();
   }, { passive: false });
 
+  // Glisser (zoom > 1) : l'image suit la souris, pour amener la carte au centre. Un simple clic recentre toujours.
+  let drag = null;   // { id, x, y, cx, cy, moved }
+  let dragged = false;   // le clic qui suit un glisser ne recentre pas sur le point lâché
+  viewport.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    dragged = false;
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, cx: view.cx, cy: view.cy, moved: false };
+  });
+  viewport.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+    if (!drag.moved) {
+      drag.moved = true;
+      viewport.setPointerCapture(e.pointerId);
+      viewport.classList.add("dragging");
+    }
+    const { W, H, z } = placement();
+    view.cx = drag.cx - dx / (W * z);
+    view.cy = drag.cy - dy / (H * z);
+    apply(false);
+  });
+  const endDrag = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (drag.moved) {
+      viewport.classList.remove("dragging");
+      store.set("ms-view", view);
+      dragged = true;
+    }
+    drag = null;
+  };
+  viewport.addEventListener("pointerup", endDrag);
+  viewport.addEventListener("pointercancel", endDrag);
+
   viewport.addEventListener("click", (e) => {
+    if (dragged) return;
     const r = viewport.getBoundingClientRect();
     const at = imagePointAt(e.clientX - r.left, e.clientY - r.top);
     view.cx = at.x;

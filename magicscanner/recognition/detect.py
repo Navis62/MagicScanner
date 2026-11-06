@@ -51,6 +51,129 @@ def _has_detail(small: np.ndarray, quad: np.ndarray) -> bool:
     return (cv2.Canny(cv2.GaussianBlur(inner, (3, 3), 0), 40, 120) > 0).mean() >= MIN_DETAIL
 
 
+EXPAND_REACH = 0.3   # recherche du bord extérieur jusqu'à 30 % du petit côté (bandeau du titre compris)
+EXPAND_JUMP = 35     # saut de luminosité (sur 4 px) entre la bordure noire et le fond clair
+EXPAND_DARK = 90     # luminosité moyenne maximale de la bande traversée (bordure / cadre noir)
+EXPAND_LIGHT = 30    # au-delà du saut, le fond reste plus clair que la bande d'au moins ça (pas une lettre du titre)
+EXPAND_SAMPLES = 31  # points de mesure le long de chaque côté
+EXPAND_MIN_HITS = 0.4  # part des points où le bord est trouvé pour que le côté compte
+EXPAND_RATIO = 0.06  # tolérance sur les proportions du quadrilatère agrandi
+
+
+def _outer_edge(gray: np.ndarray, a: np.ndarray, b: np.ndarray, n: np.ndarray, reach: int):
+    """Bord de la carte au-delà du côté a-b (vers l'extérieur `n`) : en chaque point de mesure, le premier passage
+    d'une bande sombre (bordure, cadre noir) à un fond clair qui le reste ; une droite est ajustée sur ces points.
+    Renvoie (point, direction) ou None si le bord n'est pas net (côté collé à la paroi ombrée, à la pile de cartes)."""
+    offs = np.arange(0, reach + 12)
+    base = a + np.outer(np.linspace(0.1, 0.9, EXPAND_SAMPLES), b - a)
+    pts = (base[:, None] + offs[None, :, None] * n).astype(np.float32)          # (points, décalages, 2)
+    prof = cv2.remap(gray, pts[..., 0], pts[..., 1], cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE).astype(np.float32)
+    hits = []
+    for i, row in enumerate(prof):
+        dark = np.cumsum(row) / np.arange(1, len(row) + 1)                       # moyenne de la bande [0, j]
+        for j in range(2, reach):
+            if (row[j + 2] - row[j - 2] >= EXPAND_JUMP and dark[j] <= EXPAND_DARK
+                    and row[j + 3:j + 11].min() >= dark[j] + EXPAND_LIGHT):
+                hits.append(base[i] + j * n)
+                break
+    if len(hits) < EXPAND_MIN_HITS * EXPAND_SAMPLES:
+        return None
+    vx, vy, x0, y0 = cv2.fitLine(np.float32(hits), cv2.DIST_HUBER, 0, 0.01, 0.01).ravel()
+    return np.float32([x0, y0]), np.float32([vx, vy])
+
+
+def _intersect(l1, l2) -> np.ndarray | None:
+    (p1, d1), (p2, d2) = l1, l2
+    m = np.array([d1, -d2], np.float32).T
+    if abs(np.linalg.det(m)) < 1e-6:
+        return None
+    return p1 + np.linalg.solve(m, p2 - p1)[0] * d1
+
+
+def _expand(gray: np.ndarray, quad: np.ndarray) -> np.ndarray:
+    """Agrandit le quadrilatère jusqu'au bord extérieur de la carte. Sur une carte noire, le cadre se confond avec la
+    bordure : le contour le plus net est souvent l'intérieur du cadre (illustration + boîte de texte), aux proportions
+    voisines d'une carte, et le titre reste dehors. Si l'extérieur est déjà le fond clair, le bord est trouvé tout de
+    suite et rien ne change. Un côté sans bord net est placé d'après les proportions d'une carte."""
+    q = _order(quad)
+    center = q.mean(0)
+    short = min(np.linalg.norm(q[1] - q[0]), np.linalg.norm(q[3] - q[0]))
+    reach = int(EXPAND_REACH * short)
+    normals, lines = [], []
+    for i in range(4):
+        a, b = q[i], q[(i + 1) % 4]
+        t = (b - a) / np.linalg.norm(b - a)
+        n = np.array([-t[1], t[0]], np.float32)
+        if np.dot(n, (a + b) / 2 - center) < 0:
+            n = -n
+        normals.append(n)
+        lines.append(_outer_edge(gray, a, b, n, reach))
+    grown = _grown(gray, q, lines)
+    if grown is None:
+        grown = _symmetric(gray, q, normals, lines)
+    if grown is None:
+        grown = _one_missing(gray, q, normals, lines)
+    return quad if grown is None else grown
+
+
+def _check(gray: np.ndarray, q: np.ndarray, lines) -> np.ndarray | None:
+    """Quadrilatère formé par les quatre droites, s'il a les proportions d'une carte et contient la zone de départ."""
+    corners = [_intersect(lines[i - 1], lines[i]) for i in range(4)]
+    if any(c is None for c in corners):
+        return None
+    grown = _order(np.float32(corners))
+    w, h = sorted(cv2.minAreaRect(grown)[1])
+    if (h == 0 or abs(w / h - RATIO) / RATIO > EXPAND_RATIO or _score(grown, gray.shape[:2]) is None
+            or cv2.contourArea(grown) < 0.9 * cv2.contourArea(q)):
+        return None
+    return grown
+
+
+def _grown(gray, q, lines):
+    """Les quatre bords trouvés."""
+    return None if any(l is None for l in lines) else _check(gray, q, lines)
+
+
+def _symmetric(gray, q, normals, lines):
+    """Bords trouvés au-delà de la carte (pile de cartes noires, paroi dans l'ombre : du sombre continue après la
+    bordure) : on garde le haut et le bas de la carte (petits côtés) et on place les grands côtés symétriquement autour
+    de l'axe de la zone de départ, l'illustration et la boîte de texte étant centrées en largeur sur la carte."""
+    long0 = np.linalg.norm(q[1] - q[0]) > np.linalg.norm(q[2] - q[1])   # côtés 0 et 2 = grands côtés ?
+    short_ids, long_ids = ((1, 3), (0, 2)) if long0 else ((0, 2), (1, 3))
+    if any(lines[i] is None for i in short_ids):
+        return None
+    l1, l3 = lines[short_ids[0]], lines[short_ids[1]]
+    axis_dir = q[(long_ids[0] + 1) % 4] - q[long_ids[0]]                  # direction des grands côtés
+    mid = q.mean(0)
+    a, b = _intersect(l1, (mid, axis_dir)), _intersect(l3, (mid, axis_dir))
+    if a is None or b is None:
+        return None
+    half = float(np.linalg.norm(a - b)) * RATIO / 2
+    out = list(lines)
+    for i in long_ids:
+        out[i] = (mid + half * normals[i], axis_dir)
+    return _check(gray, q, out)
+
+
+def _one_missing(gray, q, normals, lines):
+    """Un seul côté sans bord net : parallèle à l'opposé, à la distance que donnent les proportions d'une carte."""
+    missing = [i for i, l in enumerate(lines) if l is None]
+    if len(missing) != 1:
+        return None
+    lines = list(lines)
+    for i in missing:
+        # Côté sans bord net : parallèle à l'opposé, à la distance que donnent les proportions d'une carte.
+        opp, s1, s3 = lines[(i + 2) % 4], lines[(i + 1) % 4], lines[(i + 3) % 4]
+        c1, c3 = _intersect(s1, opp), _intersect(s3, opp)
+        if c1 is None or c3 is None:
+            return None
+        along = float(np.linalg.norm(c1 - c3))                                  # longueur du côté opposé
+        long_side = np.linalg.norm(q[(i + 1) % 4] - q[i]) > np.linalg.norm(q[(i + 2) % 4] - q[(i + 1) % 4])
+        gap = along * RATIO if long_side else along / RATIO
+        lines[i] = ((c1 + c3) / 2 - gap * normals[(i + 2) % 4], opp[1])
+    return _check(gray, q, lines)
+
+
 def find_card(frame: np.ndarray, orientation: str | None = None) -> np.ndarray | None:
     """Retourne les 4 coins (ordonnés) du meilleur candidat carte, ou None. `orientation` ("portrait", "landscape" ou
     None) : sens de la carte dans l'image, pour la recherche de secours."""
@@ -82,9 +205,10 @@ def find_card(frame: np.ndarray, orientation: str | None = None) -> np.ndarray |
     best = next((q for _, q in sorted(candidates, key=lambda c: -c[0]) if _has_detail(small, q)), None)
     if best is None:
         # Contours fusionnés avec la boîte ou la pile de cartes : on cherche plutôt un rectangle bien soutenu par des bords.
-        rect = card_rect.find_rect(small, orientation)
-        return None if rect is None or not _has_detail(small, rect) else _order(rect / scale)
-    return _order(best / scale)
+        best = card_rect.find_rect(small, orientation)
+        if best is None or not _has_detail(small, best):
+            return None
+    return _order(_expand(gray, best.astype(np.float32)) / scale)
 
 
 def _portrait(corners: np.ndarray) -> np.ndarray:
