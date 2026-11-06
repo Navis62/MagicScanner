@@ -2,6 +2,9 @@
 import argparse
 import csv
 import logging
+import threading
+import time
+import urllib.request
 import webbrowser
 
 from . import db, inventory
@@ -18,12 +21,24 @@ def cmd_sync_expansions(con, args) -> None:
     expansions.sync(con)
 
 
+def _open_when_ready(url: str, timeout: float = 60) -> None:
+    """Ouvre le navigateur une fois le serveur prêt, sinon la page arrive sans son CSS."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            urllib.request.urlopen(f"{url}/static/style.css", timeout=1).close()
+            break
+        except OSError:
+            time.sleep(0.3)
+    webbrowser.open(url)
+
+
 def cmd_serve(con, args) -> None:
     import uvicorn
     url = f"http://127.0.0.1:{args.port}"
     print(f"Interface : {url}")
     if not args.no_browser:
-        webbrowser.open(url)
+        threading.Thread(target=_open_when_ready, args=(url,), daemon=True).start()
     uvicorn.run("magicscanner.web.app:app", host="127.0.0.1", port=args.port, log_level="warning")
 
 
