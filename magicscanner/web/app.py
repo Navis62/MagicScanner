@@ -1,5 +1,6 @@
 """Serveur local : interface de scan (webcam dans le navigateur) + API de reconnaissance et d'inventaire."""
 import base64
+import logging
 import sqlite3
 import threading
 import time
@@ -44,6 +45,27 @@ class Services:
 
 
 svc: Services
+log = logging.getLogger(__name__)
+
+PRICES_MAX_AGE_HOURS = 6   # guide Cardmarket publié chaque nuit : inutile de le retélécharger à chaque redémarrage
+
+
+def _refresh_prices() -> str | None:
+    """Télécharge le guide hors du verrou (quelques secondes) : les scans continuent pendant ce temps."""
+    guide = cardmarket.download_prices()
+    with svc.lock:
+        return cardmarket.store_prices(svc.con, guide)
+
+
+def _refresh_prices_at_startup() -> None:
+    age = cardmarket.prices_age_hours()
+    if age is not None and age < PRICES_MAX_AGE_HOURS:
+        log.info("prix tendance téléchargés il y a %.1f h : pas de mise à jour", age)
+        return
+    try:
+        log.info("prix tendance à jour (guide Cardmarket du %s)", _refresh_prices())
+    except (httpx.HTTPError, ValueError, KeyError) as e:   # hors ligne, guide illisible : on garde les prix en base
+        log.warning("prix tendance non mis à jour au démarrage : %s", e)
 
 
 @asynccontextmanager
@@ -53,6 +75,7 @@ async def lifespan(_: FastAPI):
     con = db.connect()
     catalog = Catalog(con)
     svc = Services(con, catalog, Recognizer(catalog), threading.Lock())
+    threading.Thread(target=_refresh_prices_at_startup, name="prices", daemon=True).start()
     yield
     con.close()
 
@@ -270,8 +293,7 @@ def recent(limit: int = 30):
 def refresh_prices():
     """Retélécharge le guide des prix Cardmarket (prix tendance, y compris foil)."""
     try:
-        with svc.lock:
-            created = cardmarket.import_prices(svc.con)
+        created = _refresh_prices()
     except httpx.HTTPError as e:
         raise HTTPException(502, f"Téléchargement impossible : {e}") from None
     return {"created_at": created}

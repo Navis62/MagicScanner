@@ -29,7 +29,8 @@ magicscanner sync-expansions   # slugs officiels des extensions (ouvre Chrome, s
 ```
 
 Relancer `import` de temps en temps pour les nouvelles éditions (puis `sync-expansions` si une extension est sortie).
-Les prix tendance se mettent à jour à part, depuis l'interface (bouton « Prix tendance ↻ »).
+Les prix tendance se mettent à jour tout seuls au lancement du serveur (en arrière-plan, si le guide a plus de 6 h),
+et à la demande depuis l'interface (bouton « Prix tendance ↻ »).
 
 ## Scanner
 

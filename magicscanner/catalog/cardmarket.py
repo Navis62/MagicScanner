@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import sqlite3
+import time
 from collections import Counter, defaultdict
 
 from ..config import CARDMARKET_DIR, CM_PRICES_URL, CM_PRODUCTS_URL
@@ -28,10 +29,26 @@ def import_catalog(con: sqlite3.Connection) -> None:
     import_prices(con)
 
 
+PRICE_GUIDE = CARDMARKET_DIR / "price_guide.json"
+
+
+def download_prices() -> dict:
+    """Télécharge le guide des prix Cardmarket (mis à jour chaque nuit), sans toucher à la base."""
+    return json.loads(download(CM_PRICES_URL, PRICE_GUIDE).read_text(encoding="utf-8"))
+
+
+def prices_age_hours() -> float | None:
+    """Âge du guide des prix téléchargé en dernier (None s'il n'a jamais été téléchargé)."""
+    return (time.time() - PRICE_GUIDE.stat().st_mtime) / 3600 if PRICE_GUIDE.exists() else None
+
+
 def import_prices(con: sqlite3.Connection) -> str | None:
-    """Télécharge le guide des prix Cardmarket (mis à jour chaque nuit) et remplace les prix en base.
-    Renvoie la date de publication du guide."""
-    guide = json.loads(download(CM_PRICES_URL, CARDMARKET_DIR / "price_guide.json").read_text(encoding="utf-8"))
+    """Télécharge le guide des prix Cardmarket et remplace les prix en base. Renvoie sa date de publication."""
+    return store_prices(con, download_prices())
+
+
+def store_prices(con: sqlite3.Connection, guide: dict) -> str | None:
+    """Remplace les prix en base par ceux du guide. Renvoie la date de publication du guide."""
     guides = guide["priceGuides"]
     con.execute("DELETE FROM cm_prices")
     con.executemany(
