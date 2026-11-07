@@ -81,9 +81,21 @@ def _best_aligned(edges: np.ndarray):
         if objective[i] > best[0]:
             best = (float(objective[i]), (int(xa[i]), int(y1[i]), int(xb[i]), int(y2[i])), sides[:, i])
 
+    def pairs(supported: np.ndarray, spans: np.ndarray):
+        """Couples (début, fin) de deux positions assez soutenues, écartées d'une des longueurs `spans`. Un côté
+        soutenu à moins de MIN_SIDE élimine le rectangle : on ne combine que ces positions-là (quelques dizaines au
+        lieu de toutes), ce qui ne change pas le résultat."""
+        ok_pos = supported >= MIN_SIDE
+        start = np.repeat(np.flatnonzero(ok_pos), len(spans))
+        end = start + np.tile(spans, len(start) // max(len(spans), 1))
+        inside = end < len(supported)
+        start, end = start[inside], end[inside]
+        keep = ok_pos[end]
+        return start[keep], end[keep]
+
     e = edges > 0
     cols, rows = _peaks(e.sum(0), PEAKS), _peaks(e.sum(1), PEAKS)
-    # Deux colonnes marquées -> le haut est testé à toutes les hauteurs, le bas se déduit des proportions.
+    # Deux colonnes marquées -> haut et bas parmi les lignes bien soutenues entre elles, aux proportions d'une carte.
     for i, a in enumerate(cols):
         for b in cols[i + 1:]:
             xa, xb = sorted((a, b))
@@ -91,23 +103,18 @@ def _best_aligned(edges: np.ndarray):
             heights = np.arange(max(int(width / RATIO * (1 - DELTA)), int(MIN_HEIGHT * h)), int(width / RATIO * (1 + DELTA)) + 1)
             if len(heights) == 0:
                 continue
-            y1 = np.repeat(np.arange(h), len(heights))
-            y2 = y1 + np.tile(heights, h)
-            ok = y2 < h
-            consider(np.full(ok.sum(), xa), np.full(ok.sum(), xb), y1[ok], y2[ok])
-    # Deux lignes marquées -> la gauche est testée partout, la droite se déduit des proportions.
+            y1, y2 = pairs((support.right[:, xb] - support.right[:, xa]) / width, heights)
+            consider(np.full(len(y1), xa), np.full(len(y1), xb), y1, y2)
+    # Deux lignes marquées -> gauche et droite parmi les colonnes bien soutenues entre elles.
     for i, a in enumerate(rows):
         for b in rows[i + 1:]:
             y1, y2 = sorted((a, b))
             height = y2 - y1
             if height < MIN_HEIGHT * h:
                 continue
-            # Toutes les largeurs plausibles × toutes les positions à gauche, en un seul appel.
             widths = np.arange(int(height * RATIO * (1 - DELTA)), int(height * RATIO * (1 + DELTA)) + 1, 2)
-            xa, width = np.meshgrid(np.arange(w), widths)
-            ok = xa + width < w
-            xa, width = xa[ok], width[ok]
-            consider(xa, xa + width, np.full(len(xa), y1), np.full(len(xa), y2))
+            xa, xb = pairs((support.down[y2] - support.down[y1]) / height, widths)
+            consider(xa, xb, np.full(len(xa), y1), np.full(len(xa), y2))
     return best
 
 
