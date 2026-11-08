@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(pytest *)",
+      "Bash(python -m pytest *)",
+      "Bash(.venv/Scripts/python -m pytest *)",
+      "Bash(ruff check *)",
+      "Bash(.venv/Scripts/ruff check *)",
+      "Bash(python .claude/skills/diagnose-scan/scripts/diagnose.py *)",
+      "Bash(.venv/Scripts/python .claude/skills/diagnose-scan/scripts/diagnose.py *)",
+      "Bash(magicscanner status)",
+      "Bash(python -m magicscanner status)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git branch --show-current)",
+      "WebFetch(domain:api.scryfall.com)",
+      "WebFetch(domain:scryfall.com)",
+      "WebFetch(domain:code.claude.com)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(git commit *)",
+      "Bash(magicscanner import *)",
+      "Bash(magicscanner sync-expansions *)",
+      "Bash(pip install *)",
+      "Bash(pip uninstall *)"
+    ],
+    "deny": [
+      "Read(./data/chrome-profile/**)",
+      "Edit(./data/**)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.venv/Scripts/python.exe\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard_bash.py\"",
+            "timeout": 10,
+            "statusMessage": "Vérification de la commande"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.venv/Scripts/python.exe\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/lint_python.py\"",
+            "timeout": 60,
+            "statusMessage": "ruff check"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.venv/Scripts/python.exe\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/tests_on_stop.py\" snapshot",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.venv/Scripts/python.exe\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/tests_on_stop.py\"",
+            "timeout": 300,
+            "statusMessage": "Tests rapides (pytest -m 'not integration')"
+          }
+        ]
+      }
+    ]
+  },
+  "extraKnownMarketplaces": {
+    "claude-plugins-official": {
+      "source": { "source": "github", "repo": "anthropics/claude-plugins-official" }
+    }
+  },
+  "enabledPlugins": {
+    "security-guidance@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true
+  }
+}
