@@ -10,7 +10,7 @@ async function request(url, options = {}) {
   return r.json();
 }
 
-const postImage = (url, blob, foil = false, price = 0.18, lockedSet = "", crop = null) => {
+const postImage = (url, blob, foil = false, price = 0.20, lockedSet = "", crop = null) => {
   const body = new FormData();
   body.append("image", blob, "frame.jpg");
   body.append("foil", foil);

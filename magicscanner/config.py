@@ -16,7 +16,7 @@ KEEP_SCANS = os.environ.get("MS_KEEP_SCANS", "low")
 LOW_CONFIDENCE = 0.5   # en dessous, l'interface demande de vérifier la carte
 
 # --- Stock (POC : tout est NM, prix par défaut fixe) ---------------------------------------------------------------------
-DEFAULT_PRICE = float(os.environ.get("MS_PRICE", "0.18"))
+DEFAULT_PRICE = float(os.environ.get("MS_PRICE", "0.20"))
 DEFAULT_CONDITION = "NM"
 MIN_PRICE = 0.02   # prix minimum accepté par Cardmarket
 LANGS = ("en", "fr")

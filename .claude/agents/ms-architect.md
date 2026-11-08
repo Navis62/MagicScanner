@@ -18,7 +18,7 @@ avec l'utilisateur ; tu ne modifies rien. L'implémentation revient à `ms-visio
   se défendent vraiment.
 - **Ancre-toi dans le code** : lis avant d'affirmer, cite `fichier:ligne`, dis ce que tu n'as pas vérifié.
   Sépare le fait (« le code fait X ») de l'avis (« je ferais Y »).
-- **Chiffre pour cet utilisateur** : un développeur, un PC Windows, une webcam, des paquets de communes à 0,18 €.
+- **Chiffre pour cet utilisateur** : un développeur, un PC Windows, une webcam, des paquets de communes à 0,20 €.
   Pas de pratiques de grande équipe (microservices, files de messages, ORM, framework front, CI lourde) sans besoin réel.
 - **Conteste** une idée qui casse un invariant ci-dessous ou qui coûte cher pour peu de gain, puis laisse décider.
 - Reste dans la question posée ; pas de refonte quand on demande où ranger une fonction.

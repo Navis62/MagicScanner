@@ -1,6 +1,6 @@
 # MagicScanner
 
-Scanner webcam de cartes Magic (communes / unco, VO ou VF, foil ou non, NM) puis export du stock vers TCG Powertools, qui met les cartes en vente sur Cardmarket (0,18 € par défaut, prix modifiable au scan).
+Scanner webcam de cartes Magic (communes / unco, VO ou VF, foil ou non, NM) puis export du stock vers TCG Powertools, qui met les cartes en vente sur Cardmarket (0,20 € par défaut, prix modifiable au scan).
 
 ## Principe
 
@@ -58,7 +58,7 @@ elle est quand même reconnue grâce à une relecture à 180°, un peu plus lent
 | `F` | coche / décoche « Foil » |
 | `/` | recherche manuelle par nom (VO ou VF) si la reconnaissance échoue (barre en haut de page) |
 
-**Foil et prix** : la case « Foil » et le champ « Prix » (0,18 € par défaut, `MS_PRICE`) s'appliquent aux scans suivants,
+**Foil et prix** : la case « Foil » et le champ « Prix » (0,20 € par défaut, `MS_PRICE`) s'appliquent aux scans suivants,
 et à la dernière carte scannée si on les change juste après. Un foil, ou une carte à un autre prix, forme sa propre ligne
 de stock. Une impression qui n'existe pas dans la finition scannée n'est jamais choisie (foil-only pour une carte non-foil
 et inversement).
@@ -157,7 +157,7 @@ ruff check .        # lint
 
 ## Configuration (variables d'environnement)
 
-`MS_PRICE` (0.18, prix par défaut du champ « Prix »), `MS_KEEP_SCANS` (`low` : photos gardées seulement pour les scans à vérifier ; `none` ou `all`), `MS_CHROME` (chemin chrome.exe), `MS_CDP_PORT` (9222),
+`MS_PRICE` (0.20, prix par défaut du champ « Prix »), `MS_KEEP_SCANS` (`low` : photos gardées seulement pour les scans à vérifier ; `none` ou `all`), `MS_CHROME` (chemin chrome.exe), `MS_CDP_PORT` (9222),
 `MS_WINDOW` (`left,top,width,height` de la fenêtre Chrome, `40,40,1500,1000`), `MS_DATA` (dossier `data/`).
 
 ## Limites connues (POC)

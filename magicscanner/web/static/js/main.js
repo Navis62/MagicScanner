@@ -132,8 +132,8 @@ function setFoil(on) {
   if (editable() && !!current.card.foil !== on) reassign(current.card.card_id, current.lang, on);
 }
 
-/** Prix saisi (0,18 € par défaut) ; une saisie invalide revient au dernier prix valable. */
-let lastPrice = 0.18;
+/** Prix saisi (0,20 € par défaut) ; une saisie invalide revient au dernier prix valable. */
+let lastPrice = 0.20;
 function price() {
   const v = Math.round(parseFloat($("price").value) * 100) / 100;
   if (v >= 0.02) lastPrice = v;
