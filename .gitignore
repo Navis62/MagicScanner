@@ -5,3 +5,8 @@ data/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
+
+# Claude Code : réglages et notes personnels
+.claude/settings.local.json
+CLAUDE.local.md
+.claude/agent-memory-local/
