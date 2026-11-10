@@ -2,6 +2,7 @@
 
     python .claude/skills/diagnose-scan/scripts/diagnose.py tests/fixtures/*.jpg
     python .claude/skills/diagnose-scan/scripts/diagnose.py failed            # data/scans/failed/
+    python .claude/skills/diagnose-scan/scripts/diagnose.py slow              # data/scans/slow/ (retrouvées par le texte)
     python .claude/skills/diagnose-scan/scripts/diagnose.py img.jpg --orientation landscape --locked-set c13 --foil
     ... --save DOSSIER   # écrit la carte redressée vue par l'OCR
 
@@ -27,8 +28,8 @@ from magicscanner.config import DB_PATH, SCANS_DIR
 def expand(args: list[str]) -> list[Path]:
     paths = []
     for a in args:
-        if a == "failed":
-            paths += sorted((SCANS_DIR / "failed").glob("*.jpg"))
+        if a in ("failed", "slow"):
+            paths += sorted((SCANS_DIR / a).glob("*.jpg"))
         else:
             paths += [Path(p) for p in (glob.glob(a) or [a])]
     return paths
@@ -41,7 +42,7 @@ def describe(con, card_id: str) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("images", nargs="+", help="fichiers, motifs glob, ou « failed »")
+    ap.add_argument("images", nargs="+", help="fichiers, motifs glob, « failed » ou « slow »")
     ap.add_argument("--orientation", choices=["portrait", "landscape"])
     ap.add_argument("--locked-set")
     ap.add_argument("--foil", action="store_true")
@@ -76,6 +77,7 @@ def main() -> int:
         dt = time.perf_counter() - t
         flags = [f for f, on in (("AMBIGU", r.ambiguous), ("HORS-ÉDITION", r.off_set)) if on]
         print(f"== {path.name}  ({dt:.2f} s)  {'OK' if r.ok else 'ÉCHEC: ' + str(r.error)}  {' '.join(flags)}")
+        print("   étapes : " + ", ".join(f"{step} {seconds:.2f} s" for step, seconds in r.timings.items()))
         print(f"   titre lu : {r.title!r}  langue={r.lang}  nom={r.name_score:.0f}  confiance={r.confidence:.2f}"
               f"  étincelle={r.list_symbol:.2f}")
         if r.lines:

@@ -169,4 +169,8 @@ ruff check .        # lint
 - Les images de référence Scryfall sont mises en cache en 366 px (~46 Ko) : suffisant pour départager les éditions.
 - Vérifier le numéro de collection quand le choix est ambigu : le pied de carte est souvent illisible pour l'OCR.
 - La localisation par le texte (carte à bord noir perdu dans l'ombre) exige un titre et une ligne du bas lisibles, et une carte à peu près droite ; elle ajoute ~2,5 s au scan concerné. Comme la ligne du bas est incertaine (cartes à bascule : nom retourné), plusieurs positions de carte sont essayées jusqu'à ce que le nom soit reconnu.
-- Les images de scans ratés sont gardées (20 dernières) dans `data/scans/failed/` pour diagnostic.
+- Les images de scans ratés sont gardées (20 dernières) dans `data/scans/failed/` pour diagnostic, et celles des scans
+  dont la carte a dû être retrouvée par son texte (secours lent) dans `data/scans/slow/`.
+- Scan lent : la console de `magicscanner serve` affiche une ligne par scan avec le temps de chaque étape (`attente` du
+  verrou, `contours`, `lecture` OCR, `texte` = localisation par le texte, `impressions` = comparaison visuelle),
+  la taille de l'image analysée et le zoom.

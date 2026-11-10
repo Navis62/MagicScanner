@@ -52,9 +52,14 @@ PRICES_MAX_AGE_HOURS = 6   # guide Cardmarket publié chaque nuit : inutile de l
 
 def _refresh_prices() -> str | None:
     """Télécharge le guide hors du verrou (quelques secondes) : les scans continuent pendant ce temps."""
+    t = time.perf_counter()
     guide = cardmarket.download_prices()
+    downloaded = time.perf_counter()
     with svc.lock:
-        return cardmarket.store_prices(svc.con, guide)
+        created = cardmarket.store_prices(svc.con, guide)
+    log.info("prix tendance : téléchargés en %.1f s, enregistrés en %.1f s (scans bloqués pendant ce temps)",
+             downloaded - t, time.perf_counter() - downloaded)
+    return created
 
 
 def _refresh_prices_at_startup() -> None:
@@ -127,15 +132,16 @@ def _review_reason(rec) -> str | None:
     return None
 
 
-FAILED_KEPT = 20
+FRAMES_KEPT = 20
 
 
-def _keep_failed_frame(frame: np.ndarray) -> None:
-    """Garde les dernières images des scans ratés (data/scans/failed/) pour comprendre ce qui s'est passé."""
-    folder = SCANS_DIR / "failed"
+def _keep_frame(frame: np.ndarray, kind: str) -> None:
+    """Garde les dernières images reçues dans data/scans/<kind>/ pour comprendre ce qui s'est passé : « failed » (scan
+    raté), « slow » (carte retrouvée par son texte, faute de bord : le secours lent)."""
+    folder = SCANS_DIR / kind
     folder.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(folder / f"{time.strftime('%Y%m%d-%H%M%S')}.jpg"), frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-    for old in sorted(folder.glob("*.jpg"))[:-FAILED_KEPT]:
+    for old in sorted(folder.glob("*.jpg"))[:-FRAMES_KEPT]:
         old.unlink()
 
 
@@ -188,34 +194,60 @@ async def scan(image: Image, foil: bool = Form(False),
                orientation: str = Form(""), crop: str = Form("")):
     """Reconnaît la carte et l'ajoute immédiatement au stock (annulable). `locked_set` : édition fixée (paquet d'une
     seule édition), vide pour toutes. `crop` : zone de l'image à analyser (aperçu zoomé), vide pour l'image entière."""
-    frame, (dx, dy) = _crop(await _decode(image), crop)
+    start = time.perf_counter()
+    whole = await _decode(image)
+    frame, (dx, dy) = _crop(whole, crop)
+    decoded = time.perf_counter()
     with svc.lock:
+        locked = time.perf_counter()
         rec = svc.recognizer.recognize(frame, previous_set=svc.previous_set, foil=foil, locked_set=locked_set or None,
                                      orientation=_orientation(orientation))
-        corners = [[x + dx, y + dy] for x, y in rec.corners] if rec.corners else None   # repère de l'image entière
-        out = {
-            "ok": rec.ok, "error": rec.error, "lang": rec.lang, "confidence": rec.confidence,
-            "title": rec.title, "ocr": rec.lines, "corners": corners, "list_symbol": rec.list_symbol,
-            "warped": _jpeg_data_url(rec.warped) if rec.warped is not None else None,
-        }
-        if not rec.ok:
-            _keep_failed_frame(frame)
-            return out
-        best = rec.best
-        scan_id = inventory.add_scan(svc.con, best.card_id, rec.lang, rec.confidence, " | ".join(rec.lines),
-                                     foil, price)
-        if KEEP_SCANS == "all" or (KEEP_SCANS == "low" and rec.confidence < LOW_CONFIDENCE):
-            cv2.imwrite(str(SCANS_DIR / f"{scan_id}.jpg"), rec.warped, [cv2.IMWRITE_JPEG_QUALITY, 70])
-        card = _card(best.card_id, rec.lang, best, foil, price)
-        svc.previous_set = card["set_code"]
-        return out | {
-            "scan_id": scan_id,
-            "needs_review": _review_reason(rec) is not None,
-            "review_reason": _review_reason(rec),
-            "card": card,
-            "alternatives": [_card(c.card_id, candidate=c) for c in rec.candidates[1:1 + MAX_ALTERNATIVES]],
-            "stats": inventory.stats(svc.con),
-        }
+        recognized = time.perf_counter()
+        out = _scan_result(frame, rec, (dx, dy), foil, price)
+    steps = {"décodage": decoded - start, "attente": locked - decoded, **rec.timings,
+             "après": time.perf_counter() - recognized}
+    _log_scan(frame, rec, orientation, frame is not whole, steps, time.perf_counter() - start)
+    return out
+
+
+def _log_scan(frame: np.ndarray, rec, orientation: str, zoomed: bool, steps: dict[str, float], total: float) -> None:
+    """Une ligne par scan dans la console : où part le temps (attente du verrou, contours, OCR, localisation par le
+    texte, comparaison des impressions) et la taille de l'image analysée, pour comprendre un scan lent."""
+    h, w = frame.shape[:2]
+    detail = ", ".join(f"{step} {seconds:.2f}" for step, seconds in steps.items())
+    log.info("scan %.2f s (%s) — %d×%d %s%s — %s", total, detail, w, h, orientation or "?",
+             " zoomé" if zoomed else "", f"lu « {rec.title} »" if rec.ok else rec.error)
+
+
+def _scan_result(frame: np.ndarray, rec, offset: tuple[int, int], foil: bool, price: float) -> dict:
+    """Réponse de /api/scan, sous le verrou : un scan réussi est ajouté au stock, l'image d'un scan raté est gardée."""
+    dx, dy = offset
+    corners = [[x + dx, y + dy] for x, y in rec.corners] if rec.corners else None   # repère de l'image entière
+    out = {
+        "ok": rec.ok, "error": rec.error, "lang": rec.lang, "confidence": rec.confidence,
+        "title": rec.title, "ocr": rec.lines, "corners": corners, "list_symbol": rec.list_symbol,
+        "warped": _jpeg_data_url(rec.warped) if rec.warped is not None else None,
+    }
+    if not rec.ok:
+        _keep_frame(frame, "failed")
+        return out
+    if "texte" in rec.timings:
+        _keep_frame(frame, "slow")
+    best = rec.best
+    scan_id = inventory.add_scan(svc.con, best.card_id, rec.lang, rec.confidence, " | ".join(rec.lines),
+                                 foil, price)
+    if KEEP_SCANS == "all" or (KEEP_SCANS == "low" and rec.confidence < LOW_CONFIDENCE):
+        cv2.imwrite(str(SCANS_DIR / f"{scan_id}.jpg"), rec.warped, [cv2.IMWRITE_JPEG_QUALITY, 70])
+    card = _card(best.card_id, rec.lang, best, foil, price)
+    svc.previous_set = card["set_code"]
+    return out | {
+        "scan_id": scan_id,
+        "needs_review": _review_reason(rec) is not None,
+        "review_reason": _review_reason(rec),
+        "card": card,
+        "alternatives": [_card(c.card_id, candidate=c) for c in rec.candidates[1:1 + MAX_ALTERNATIVES]],
+        "stats": inventory.stats(svc.con),
+    }
 
 
 @app.post("/api/detect")

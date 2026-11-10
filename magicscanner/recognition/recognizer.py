@@ -1,4 +1,5 @@
 """Pipeline : détection de la carte -> OCR -> nom (VO/VF) -> impressions candidates -> score -> meilleure impression."""
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
@@ -38,6 +39,7 @@ class Recognition:
     list_symbol: float = 0.0   # confiance (0-1) que le symbole The List est présent
     ambiguous: bool = False    # le choix entre deux produits Cardmarket différents ne tient qu'à peu de chose
     off_set: bool = False      # une édition était fixée mais la carte n'en fait pas partie
+    timings: dict[str, float] = field(default_factory=dict)   # secondes passées dans chaque étape (diagnostic)
 
     @property
     def best(self) -> Candidate | None:
@@ -167,10 +169,19 @@ class Recognizer:
         """`locked_set` : édition fixée (paquet d'une seule édition) ; seules ses impressions sont envisagées, sauf si la
         carte n'en fait manifestement pas partie. `orientation` : sens de la carte dans l'image ("portrait",
         "landscape"), None si inconnu."""
+        timings, clock = {}, [time.perf_counter()]
+
+        def lap(step: str) -> None:
+            now = time.perf_counter()
+            timings[step] = round(now - clock[0], 3)
+            clock[0] = now
+
         corners = detect.find_card(frame, orientation)
+        lap("contours")
         card = None
         if corners is not None:
             card, lines, titles, matches = self._read_card(_ocr_warp(frame, corners), locked_set)
+            lap("lecture")
         if card is None or not matches:
             # Contour introuvable ou mal choisi (bord noir dans l'ombre, intérieur de la boîte) : on retrouve la carte
             # par son texte.
@@ -184,12 +195,13 @@ class Recognizer:
             else:
                 if first is not None and card is None:
                     (card, lines, titles, matches), corners = first
+            lap("texte")   # localisation par le texte : le secours lent
         if card is None:
-            return Recognition(False, "Carte non détectée : vérifie le cadrage / l'éclairage")
+            return Recognition(False, "Carte non détectée : vérifie le cadrage / l'éclairage", timings=timings)
         # Comparaison visuelle, symbole The List et image renvoyée : taille de référence.
         card = cv2.resize(card, (detect.CARD_W, detect.CARD_H), interpolation=cv2.INTER_AREA)
         rec = Recognition(False, warped=card, corners=corners.tolist(), lines=[l.text for l in lines],
-                          title=titles[0] if titles else None)
+                          title=titles[0] if titles else None, timings=timings)
         if not matches:
             rec.error = f"Aucune carte ne correspond à « {titles[0]} »" if titles else "Nom illisible"
             return rec
@@ -226,4 +238,5 @@ class Recognizer:
             rec.ok = True
             rec.confidence = _confidence(best_name.score, rec.candidates)
             rec.ambiguous = _ambiguous(rec.candidates)
+        lap("impressions")   # étincelle The List + comparaison visuelle des impressions candidates
         return rec
