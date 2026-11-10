@@ -178,18 +178,20 @@ class Recognizer:
 
         corners = detect.find_card(frame, orientation)
         lap("contours")
-        card = None
+        card, matches = None, []
         if corners is not None:
             card, lines, titles, matches = self._read_card(_ocr_warp(frame, corners), locked_set)
             lap("lecture")
-        if card is None or not matches:
-            # Contour introuvable ou mal choisi (bord noir dans l'ombre, intérieur de la boîte) : on retrouve la carte
-            # par son texte.
+        if card is None or not matches or matches[0].score < NAME_SURE:
+            # Contour introuvable ou mal choisi (bord noir dans l'ombre, intérieur de la boîte, bandeau du titre laissé
+            # dehors : une ligne du texte passe alors pour le nom, mal lu) : on retrouve la carte par son texte et on
+            # garde le nom le mieux lu des deux.
+            read = matches[0].score if matches else 0
             first = None
             for located in self._relocate(frame, corners, locked_set, orientation):
                 attempt = self._read_card(_ocr_warp(frame, located), locked_set)
                 first = first or (attempt, located)
-                if attempt[3]:
+                if attempt[3] and attempt[3][0].score > read:
                     (card, lines, titles, matches), corners = attempt, located
                     break
             else:

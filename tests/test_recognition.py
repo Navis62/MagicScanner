@@ -149,3 +149,24 @@ def test_a_sideways_card_cut_in_half_by_its_contour_is_found_by_its_text():
                                         orientation="landscape")
     assert rec.ok and catalog.card_info(rec.best.card_id)["name"] == "Dirty Wererat"
     con.close()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not DB_PATH.exists(), reason="base non importée")
+def test_a_flavor_line_read_as_title_does_not_name_the_card():
+    """Photo webcam réelle : Éteigneur de réverbères (GRN 70, VF), carte noire couchée sur une pile dans la boîte. Le
+    contour retenu laisse le bandeau du titre dehors : la première ligne lue est le texte d'ambiance (« des cabrioles à
+    l'approche de la créature… »), qui ressemble vaguement à « Horror of Horrors ». Un nom aussi mal lu ne doit pas
+    l'emporter sur le vrai titre, que la localisation par le texte retrouve."""
+    from magicscanner import db
+    from magicscanner.catalog import Catalog
+    from magicscanner.recognition import Recognizer
+
+    con = db.connect()
+    catalog = Catalog(con)
+    rec = Recognizer(catalog).recognize(cv2.imread(str(FIXTURES / "lamplighter_grn_fr_flavor_as_title.jpg")),
+                                        orientation="landscape")
+    best = catalog.card_info(rec.best.card_id)
+    assert rec.ok and rec.lang == "fr"
+    assert (best["name"], best["set_code"], best["collector_number"]) == ("Douser of Lights", "grn", "70")
+    con.close()
