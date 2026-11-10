@@ -168,6 +168,9 @@ ruff check .        # lint
 - Certaines cartes n'ont pas de fiche française chez Scryfall (ex. les cartes à bascule de Champions of Kamigawa) : leur nom VF est alors absent de la base et la carte risque d'être confondue avec un nom voisin (« Adepte de sang » lu « Orateur de sang »). Les noms connus sont ajoutés à la main dans `MISSING_FR_NAMES` ([lookup.py](magicscanner/catalog/lookup.py)).
 - Les images de référence Scryfall sont mises en cache en 366 px (~46 Ko) : suffisant pour départager les éditions.
 - Vérifier le numéro de collection quand le choix est ambigu : le pied de carte est souvent illisible pour l'OCR.
+- Carte posée sur une pile dont les bords dépassent : son bord noir se confond avec la tranche des cartes du dessous.
+  Elle est alors repérée par son cadre coloré, mais pas une carte noire (cadre noir lui aussi), ni une pile en éventail :
+  celles-là sont retrouvées par le texte (~1,5 s de plus). Taper la pile pour l'aligner évite le problème.
 - La localisation par le texte (carte à bord noir perdu dans l'ombre, ou nom mal lu parce que le contour retenu laisse
   le bandeau du titre dehors : le nom le mieux lu des deux est gardé) exige un titre et une ligne du bas lisibles, et une carte à peu près droite ; elle ajoute ~2,5 s au scan concerné. Comme la ligne du bas est incertaine (cartes à bascule : nom retourné), plusieurs positions de carte sont essayées jusqu'à ce que le nom soit reconnu.
 - Les images de scans ratés sont gardées (20 dernières) dans `data/scans/failed/` pour diagnostic, et celles des scans

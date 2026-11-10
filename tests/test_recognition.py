@@ -170,3 +170,43 @@ def test_a_flavor_line_read_as_title_does_not_name_the_card():
     assert rec.ok and rec.lang == "fr"
     assert (best["name"], best["set_code"], best["collector_number"]) == ("Douser of Lights", "grn", "70")
     con.close()
+
+
+# Carte du dessus d'une pile, couchée dans la boîte (bornes x0, y0, x1, y1 relevées sur la photo) : son bord noir se perd
+# dans la tranche noire des cartes du dessous ; seul son cadre coloré, d'où dépasse la boîte de force / endurance, est net.
+PILE_CARDS = {
+    "mammoth_spider_dom_fr_box_pile_slow": ((715, 260, 1480, 880), ("Mammoth Spider", "dom", "171")),
+    "nature_spiral_dom_fr_box_pile_slow": ((600, 280, 1355, 870), ("Nature's Spiral", "dom", "175")),
+}
+
+
+@pytest.mark.parametrize("name", PILE_CARDS)
+def test_the_top_card_of_a_pile_is_found_rather_than_the_box(name):
+    """Photo webcam réelle : carte couchée sur une pile, dans la boîte. Sans 4 coins nets, l'intérieur de la boîte (aux
+    proportions d'une carte) était pris pour la carte, et elle n'était retrouvée que par son texte (+1,5 s)."""
+    (x0, y0, x1, y1), _ = PILE_CARDS[name]
+    corners = detect.find_card(cv2.imread(str(FIXTURES / f"{name}.jpg")), "landscape")
+    assert corners is not None
+    margin = 30
+    assert (corners[:, 0] >= x0 - margin).all() and (corners[:, 0] <= x1 + margin).all()
+    assert (corners[:, 1] >= y0 - margin).all() and (corners[:, 1] <= y1 + margin).all()
+    assert cv2.contourArea(corners) > 0.7 * (x1 - x0) * (y1 - y0)
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not DB_PATH.exists(), reason="base non importée")
+@pytest.mark.parametrize("name", PILE_CARDS)
+def test_the_top_card_of_a_pile_is_identified_without_the_slow_fallback(name):
+    from magicscanner import db
+    from magicscanner.catalog import Catalog
+    from magicscanner.recognition import Recognizer
+
+    _, expected = PILE_CARDS[name]
+    con = db.connect()
+    catalog = Catalog(con)
+    rec = Recognizer(catalog).recognize(cv2.imread(str(FIXTURES / f"{name}.jpg")), orientation="landscape")
+    best = catalog.card_info(rec.best.card_id, rec.lang)
+    assert rec.ok and rec.lang == "fr"
+    assert (best["name"], best["set_code"], best["collector_number"]) == expected
+    assert "texte" not in rec.timings   # trouvée par son contour, pas par la localisation par le texte
+    con.close()

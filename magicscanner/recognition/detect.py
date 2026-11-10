@@ -9,6 +9,8 @@ RATIO = 63 / 88
 MIN_DETAIL = 0.03  # part de pixels de contour à l'intérieur : une carte (illustration, texte) en a 13 % et plus,
                    # un rectangle uni (panneau de carton de la boîte, aux proportions d'une carte) presque 0
 EDGE_MARGIN = 3   # pixels (image réduite) : un quadrilatère qui touche le bord de l'image n'est pas la carte
+NESTED_MAX = 0.8  # rectangle de secours qui contient un cadre de carte plus petit que ça (en surface) : c'est
+                  # l'intérieur de la boîte autour de la carte (photos de pile : ~0,5 ; une carte et son cadre : ~1)
 
 
 def order(pts: np.ndarray) -> np.ndarray:
@@ -49,6 +51,14 @@ def _has_detail(small: np.ndarray, quad: np.ndarray) -> bool:
     gray = cv2.cvtColor(warp(small, order(quad), 176), cv2.COLOR_BGR2GRAY)
     inner = gray[18:-18, 13:-13]   # sans la bordure
     return (cv2.Canny(cv2.GaussianBlur(inner, (3, 3), 0), 40, 120) > 0).mean() >= MIN_DETAIL
+
+
+def _nested(inner: np.ndarray, outer: np.ndarray) -> bool:
+    """`inner` est-il dans `outer` (son centre ; il peut déborder un peu sur une paroi) et nettement plus petit ?"""
+    poly = order(outer).reshape(-1, 1, 2)
+    cx, cy = inner.reshape(4, 2).mean(0)
+    return (cv2.pointPolygonTest(poly, (float(cx), float(cy)), False) >= 0
+            and cv2.contourArea(order(inner)) < NESTED_MAX * cv2.contourArea(poly))
 
 
 EXPAND_REACH = 0.3   # recherche du bord extérieur jusqu'à 30 % du petit côté (bandeau du titre compris)
@@ -173,6 +183,16 @@ def _one_missing(gray, q, normals, lines):
     return _check(gray, q, lines)
 
 
+def _quad(shape: np.ndarray) -> np.ndarray | None:
+    """Quadrilatère convexe approchant le contour (4 coins), ou None."""
+    peri = cv2.arcLength(shape, True)
+    for eps in (0.02, 0.04):
+        approx = cv2.approxPolyDP(shape, eps * peri, True)
+        if len(approx) == 4 and cv2.isContourConvex(approx):
+            return approx.reshape(4, 2)
+    return None
+
+
 def find_card(frame: np.ndarray, orientation: str | None = None) -> np.ndarray | None:
     """Retourne les 4 coins (ordonnés) du meilleur candidat carte, ou None. `orientation` ("portrait", "landscape" ou
     None) : sens de la carte dans l'image, pour la recherche de secours."""
@@ -182,7 +202,7 @@ def find_card(frame: np.ndarray, orientation: str | None = None) -> np.ndarray |
     scale = min(scale, 1.0)
     gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (5, 5), 0)
-    candidates = []
+    candidates, hulls = [], []
     area = small.shape[0] * small.shape[1]
     edges_list = [cv2.Canny(gray, lo, hi) for lo, hi in ((30, 90), (60, 180))]
     # Bords sombres de la carte : seuillage adaptatif en complément de Canny.
@@ -193,18 +213,23 @@ def find_card(frame: np.ndarray, orientation: str | None = None) -> np.ndarray |
         for c in contours:
             if cv2.contourArea(c) < 0.02 * area:
                 continue
-            peri = cv2.arcLength(c, True)
-            for eps in (0.02, 0.04):
-                approx = cv2.approxPolyDP(c, eps * peri, True)
-                if len(approx) == 4 and cv2.isContourConvex(approx):
-                    sc = _score(approx.reshape(4, 2), small.shape[:2])
-                    if sc:
-                        candidates.append((sc, approx.reshape(4, 2)))
-                    break
+            quad, found = _quad(c), candidates
+            if quad is None:
+                # Pas 4 coins nets : le cadre coloré d'une carte posée sur une pile (son bord noir se perd dans la
+                # tranche noire des cartes du dessous), d'où dépasse la boîte de force / endurance. Son enveloppe
+                # convexe en a 4 ; elle ne sert qu'à défaut d'un vrai contour (moins précise), `_expand` l'agrandit
+                # ensuite jusqu'au bord de la carte.
+                quad, found = _quad(cv2.convexHull(c)), hulls
+            if quad is not None and (sc := _score(quad, small.shape[:2])):
+                found.append((sc, quad))
     best = next((q for _, q in sorted(candidates, key=lambda c: -c[0]) if _has_detail(small, q)), None)
     if best is None:
-        # Contours fusionnés avec la boîte ou la pile de cartes : on cherche plutôt un rectangle bien soutenu par des bords.
-        best = card_rect.find_rect(small, orientation)
+        # Contours fusionnés avec la boîte ou la pile de cartes : on cherche plutôt un rectangle bien soutenu par des
+        # bords. S'il contient le cadre coloré d'une carte (enveloppe convexe) bien plus petit que lui, c'est l'intérieur
+        # de la boîte autour d'elle : la carte est ce cadre.
+        rect = card_rect.find_rect(small, orientation)
+        hull = next((q for _, q in sorted(hulls, key=lambda c: -c[0]) if _has_detail(small, q)), None)
+        best = hull if hull is not None and (rect is None or _nested(hull, rect)) else rect
         if best is None or not _has_detail(small, best):
             return None
     return order(_expand(gray, best.astype(np.float32)) / scale)
