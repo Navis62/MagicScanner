@@ -2,13 +2,15 @@
 
 Les slugs Cardmarket ne suivent pas une règle unique (« Akroma's Memorial » -> Akroma-s-Memorial,
 « Lim-Dûl's Cohort » -> LimDuls-Cohort, « Plains (V.1) » -> Plains-V-1) : on génère des variantes par ordre
-de probabilité ; la première est proposée (une URL déjà validée dans la table cm_urls passe avant).
+de probabilité. Ces variantes ne servent qu'en dernier recours : une URL déjà validée (table cm_urls), sinon l'adresse
+par idProduct, que Cardmarket redirige vers la vraie fiche (« Akroma-s-Memorial » en 2007, « Lorans-Escape » en 2022,
+sans règle de date fiable : Ravnica Allegiance a encore l'ancienne forme, Core 2019 déjà la nouvelle).
 """
 import re
 import sqlite3
 import unicodedata
 
-from ..config import CM_BROWSE_QUERY, CM_SINGLES_URL
+from ..config import CM_BROWSE_QUERY, CM_PRODUCT_BY_ID_URL, CM_SINGLES_URL
 
 
 def _ascii(s: str) -> str:
@@ -61,7 +63,7 @@ def _product(con: sqlite3.Connection, card_id: str) -> sqlite3.Row | None:
 
 
 def candidate_urls(con: sqlite3.Connection, card_id: str) -> list[str]:
-    """URL déjà validée en premier, puis les variantes de slug."""
+    """URL déjà validée en premier, puis les variantes de slug (devinées)."""
     row = _product(con, card_id)
     if row is None or not row["exp_slug"]:
         return []
@@ -71,6 +73,10 @@ def candidate_urls(con: sqlite3.Connection, card_id: str) -> list[str]:
 
 
 def product_url(con: sqlite3.Connection, card_id: str) -> str | None:
+    """URL validée, sinon adresse par idProduct (exacte), sinon slug deviné (carte sans produit Cardmarket connu)."""
+    row = _product(con, card_id)
+    if row is not None and row["cardmarket_id"] and not row["known_url"]:
+        return CM_PRODUCT_BY_ID_URL.format(row["cardmarket_id"])
     urls = candidate_urls(con, card_id)
     return urls[0] if urls else None
 
@@ -79,5 +85,5 @@ def browse_url(url: str | None) -> str | None:
     """Même page produit, en français et avec les filtres d'achat habituels (pays vendeurs, langues, état)."""
     if not url:
         return None
-    return f"{url.replace('/en/', '/fr/', 1)}?{CM_BROWSE_QUERY}"
+    return f"{url.replace('/en/', '/fr/', 1)}{'&' if '?' in url else '?'}{CM_BROWSE_QUERY}"
 

@@ -35,6 +35,8 @@ CM_PRODUCTS_URL = "https://downloads.s3.cardmarket.com/productCatalog/productLis
 CM_PRICES_URL = "https://downloads.s3.cardmarket.com/productCatalog/priceGuide/price_guide_1.json"
 CM_EXPANSIONS_URL = "https://www.cardmarket.com/en/Magic/Expansions"
 CM_SINGLES_URL = "https://www.cardmarket.com/en/Magic/Products/Singles"
+# Cardmarket redirige vers la fiche produit (vrai slug, paramètres de filtre conservés) : pas de slug à deviner.
+CM_PRODUCT_BY_ID_URL = "https://www.cardmarket.com/en/Magic/Products?idProduct={}"
 # Filtres de la page produit ouverte depuis l'appli : vendeurs d'Europe, réputation, langues FR/EN, état minimum.
 CM_BROWSE_QUERY = ("sellerCountry=1,2,3,33,35,5,6,8,9,11,12,7,14,15,37,16,17,36,21,18,19,20,22,23,25,26,27,29,31,30,10,28"
                    "&sellerReputation=1&language=1,2&minCondition=2")

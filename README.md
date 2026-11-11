@@ -81,9 +81,10 @@ des cartes scannées depuis le dernier export, puis les marque comme exportées.
 sont laissées de côté (signalé dans la barre d'état). `/api/export?everything=true` réexporte tout le stock sans rien marquer.
 
 **Lien Cardmarket** : le bouton « Lien Cardmarket » ouvre la fiche de la carte (en français, avec les filtres vendeurs/langues/état
-de `CM_BROWSE_QUERY` dans `config.py`) dans un nouvel onglet. Le slug est reconstruit (`/Magic/Products/Singles/<Extension>/<Carte>`) ;
-les slugs Cardmarket n'étant pas réguliers (`Akroma-s-Memorial`, `LimDuls-Cohort`, `Plains-V-1`), la variante la plus probable est
-proposée (une URL déjà connue dans la table `cm_urls` passe avant).
+de `CM_BROWSE_QUERY` dans `config.py`) dans un nouvel onglet. Le lien passe par l'identifiant du produit
+(`/Magic/Products?idProduct=…`), que Cardmarket redirige vers la vraie fiche : les slugs ne suivent pas de règle fiable
+(`Akroma-s-Memorial` mais `Lorans-Escape`, `LimDuls-Cohort`, `Plains-V-1`). Une URL déjà connue dans la table `cm_urls` passe
+avant ; sans identifiant Cardmarket, le slug le plus probable est reconstruit (`/Magic/Products/Singles/<Extension>/<Carte>`).
 
 **En ligne de commande** :
 
