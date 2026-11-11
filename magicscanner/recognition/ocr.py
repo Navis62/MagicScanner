@@ -1,6 +1,7 @@
 """Lecture du texte de la carte redressée (RapidOCR) et extraction des indices utiles :
 nom (bandeau du haut), numéro de collection / code d'édition (bas de carte), langue du texte."""
 import re
+import unicodedata
 from dataclasses import dataclass
 
 import numpy as np
@@ -88,11 +89,24 @@ def is_flavor(text: str) -> bool:
     return text.strip()[:1] in FLAVOR_START
 
 
+# Ligne de type réduite à un mot (« Éphémère », « Rituel ») : quand le titre est illisible (photo floue), c'est la ligne la
+# plus haute et elle ressemble à un nom (« Éphémère » -> « Ephemerate »). Seul le type entier est écarté, pas un nom qui
+# commence par un type (« Creature Bond »).
+TYPE_WORDS = {"ephemere", "rituel", "creature", "enchantement", "artefact", "terrain", "bataille", "tribal", "tribu",
+              "instant", "sorcery", "enchantment", "artifact", "land", "battle", "planeswalker", "legendary", "legendaire"}
+
+
+def not_a_name(text: str) -> bool:
+    """Texte de la carte qui n'est jamais son nom : texte d'ambiance ou type seul."""
+    plain = "".join(c for c in unicodedata.normalize("NFKD", text.lower()) if not unicodedata.combining(c))
+    return is_flavor(text) or re.sub(r"[^a-z]+", " ", plain).strip() in TYPE_WORDS
+
+
 def title_candidates(lines: list[OcrLine]) -> list[str]:
     """Textes du bandeau de titre (haut-gauche), du plus haut au plus bas. Seules les lignes proches de la plus haute
     sont gardées : sinon, sur une carte mal redressée, la ligne de type (« Creature — Human Rogue ») passe pour un
     nom et peut l'emporter sur le vrai titre."""
-    top = sorted((l for l in lines if l.y < 0.13 and l.x < 0.6 and len(l.text) >= 3 and not is_flavor(l.text)),
+    top = sorted((l for l in lines if l.y < 0.13 and l.x < 0.6 and len(l.text) >= 3 and not not_a_name(l.text)),
                  key=lambda l: (l.y, l.x))
     top = [l for l in top if top and l.y - top[0].y < TITLE_BAND]
     if not top:
@@ -100,7 +114,7 @@ def title_candidates(lines: list[OcrLine]) -> list[str]:
     # Nom long coupé en plusieurs morceaux sur la même ligne (« Seigneur de » | « guerre renégat ») : on les recolle de
     # gauche à droite, sinon seul le premier morceau est cherché et un nom plus court l'emporte (« Seigneur du vide »).
     row = sorted((l for l in lines if abs(l.y - top[0].y) < SAME_ROW and l.x < TITLE_PIECE_MAX_X and len(l.text) >= 2
-                  and not is_flavor(l.text)), key=lambda l: l.x)
+                  and not not_a_name(l.text)), key=lambda l: l.x)
     merged = [" ".join(l.text for l in row)] if len(row) > 1 else []
     return merged + [l.text for l in top[:3]]
 
@@ -116,7 +130,7 @@ def sideways_titles(lines: list[OcrLine], upright: list[OcrLine] = ()) -> list[s
     n'en sont qu'un morceau (« zombie » de « Créature : zombie et assassin » ferait passer la carte pour un jeton)."""
     seen = " | ".join(l.text.lower() for l in upright)
     short = sorted((l for l in lines if 3 <= len(l.text) <= 25 and l.score >= 0.5 and l.text.lower().strip() not in seen
-                    and not is_flavor(l.text) and not COPYRIGHT.search(l.text)),
+                    and not not_a_name(l.text) and not COPYRIGHT.search(l.text)),
                    key=lambda l: (l.y, l.x))
     return [l.text for l in short[:12]]
 

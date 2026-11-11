@@ -83,6 +83,18 @@ def test_sideways_titles_keep_short_lines_only():
     assert ocr.sideways_titles(lines) == ["Trial", "Error"]
 
 
+@pytest.mark.parametrize("text", ["Éphémère", "Ephemere", "Rituel", "Instant", "Sorcery", "Créature —"])
+def test_a_lone_card_type_is_never_a_name(text):
+    """Defile (MH1) photo floue : le titre « Souiller » est illisible, la ligne de type « Éphémère » le remplaçait et
+    donnait la carte « Ephemerate »."""
+    assert ocr.not_a_name(text)
+    assert title_candidates([line(text, 0.05)]) == []
+
+
+def test_a_name_that_starts_with_a_type_is_still_a_name():
+    assert not ocr.not_a_name("Creature Bond") and not ocr.not_a_name("Rituel de la lune")
+
+
 def test_sideways_titles_ignore_the_copyright_line():
     """Bone Splinters (MM3) donnée comme le jeton « Wizard » : lue de côté, la ligne « ™ & © 2017 Wizards of the Coast »
     arrive en morceaux et « Wizards » ressemble à 92 % au nom du jeton. Le copyright n'est jamais un nom de carte."""

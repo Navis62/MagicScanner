@@ -21,6 +21,7 @@ AMBIGUOUS_GAP = 0.15  # deux premières impressions plus proches que ça ET vend
 OFF_SET_MARGIN = 8     # édition fixée : un nom hors édition ne l'emporte que s'il est lu nettement mieux
 MISFRAMED_MAX_Y = 0.6  # nom lu au-dessus de ça (hors bandeau du titre) : la zone redressée déborde de la carte
 NAME_SURE = 85         # nom lu moins bien que ça : la carte retenue n'est qu'un nom approchant, à vérifier
+SHORT_NAME = 4         # nom de 4 lettres ou moins : seule une lecture exacte est sûre (« CHT » du tapis -> « Chat »)
 OCR_MAX_HEIGHT = 1760  # l'OCR lit la carte à sa résolution d'origine (jusqu'à 2x 880 px) : titres plus nets
 
 
@@ -44,6 +45,12 @@ class Recognition:
     @property
     def best(self) -> Candidate | None:
         return self.candidates[0] if self.candidates else None
+
+
+def _name_sure(match: NameMatch) -> bool:
+    """Le nom lu suffit-il, sans chercher la carte ailleurs par son texte ? Un nom très court lu approximativement
+    vient souvent d'un bout de texte quelconque (tapis, boîte)."""
+    return match.score >= NAME_SURE and (match.score == 100 or len(match.name) > SHORT_NAME)
 
 
 def _confidence(name_score: float, candidates: list[Candidate]) -> float:
@@ -91,7 +98,7 @@ class Recognizer:
         """Un nom de carte bien lu ailleurs que dans le bandeau du titre, dans la moitié haute : la zone redressée est
         plus large que la carte (intérieur de la boîte). Les relectures à 180° et de côté n'y changeraient rien.
         (Une carte à l'envers a son titre en bas : elle garde sa relecture à 180°.)"""
-        return any(l.y < MISFRAMED_MAX_Y and len(l.text) >= 4 and not ocr.is_flavor(l.text)
+        return any(l.y < MISFRAMED_MAX_Y and len(l.text) >= 4 and not ocr.not_a_name(l.text)
                    and (m := self._match_names([l.text], locked_set)) and m[0].score >= TITLE_FOUND
                    for l in lines)
 
@@ -128,7 +135,7 @@ class Recognizer:
         retourné, texte décalé) : on propose plusieurs positions, de la plus plausible à la moins plausible."""
         lines = self.ocr.read_pixels(frame)
         titles = [(m[0].score, -l.y, l) for l in lines
-                  if len(l.text) >= 4 and not ocr.is_flavor(l.text) and (m := self._match_names([l.text], locked_set)) and m[0].score >= TITLE_FOUND]
+                  if len(l.text) >= 4 and not ocr.not_a_name(l.text) and (m := self._match_names([l.text], locked_set)) and m[0].score >= TITLE_FOUND]
         for _, _, title in sorted(titles, key=lambda t: t[:2], reverse=True):
             # Ligne de type (« Éphémère ») ou autre texte qui ressemble à un nom : un vrai titre n'a pas de nom lisible
             # au-dessus de lui dans la même colonne (la carte déduite serait décalée vers le bas).
@@ -182,7 +189,7 @@ class Recognizer:
         if corners is not None:
             card, lines, titles, matches = self._read_card(_ocr_warp(frame, corners), locked_set)
             lap("lecture")
-        if card is None or not matches or matches[0].score < NAME_SURE:
+        if card is None or not matches or not _name_sure(matches[0]):
             # Contour introuvable ou mal choisi (bord noir dans l'ombre, intérieur de la boîte, bandeau du titre laissé
             # dehors : une ligne du texte passe alors pour le nom, mal lu) : on retrouve la carte par son texte et on
             # garde le nom le mieux lu des deux.

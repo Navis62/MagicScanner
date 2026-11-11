@@ -61,6 +61,17 @@ def test_reference_images_are_cached_in_reduced_size(tmp_path):
 STUCK_CARD = np.array([[1188, 80], [1890, 80], [1890, 985], [1188, 985]])
 
 
+def test_a_short_name_read_approximately_is_not_sure():
+    """Charge téméraire (MH1) mal cadrée : « CHT » (du mot « ECHT » du tapis) ressemblait à 86 % au jeton « Chat » ; le
+    nom passait pour sûr et la localisation par le texte, qui retrouve la vraie carte, n'était pas tentée."""
+    from magicscanner.catalog import NameMatch
+    from magicscanner.recognition.recognizer import _name_sure
+
+    assert not _name_sure(NameMatch("o", "fr", "Chat", 86))
+    assert _name_sure(NameMatch("o", "fr", "Chat", 100))
+    assert _name_sure(NameMatch("o", "fr", "Charge téméraire", 90))
+
+
 @pytest.mark.parametrize("name", ["borderless_spiderman_failed", "borderless_spiderman_weak_edge"])
 def test_card_touching_the_box_wall_is_found(name):
     """Le contour de la carte fusionne avec la paroi ondulée et la pile de cartes ; le bord gauche est parfois à peine visible."""
