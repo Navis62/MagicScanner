@@ -101,6 +101,9 @@ EXPAND_SAMPLES = 31  # points de mesure le long de chaque côté
 EXPAND_MIN_HITS = 0.4  # part des points où le bord est trouvé pour que le côté compte
 EXPAND_RATIO = 0.10  # tolérance sur les proportions du quadrilatère agrandi quand un côté est déduit des proportions
                      # (quatre bords réellement trouvés : RATIO_TOL, la caméra en biais en fait un trapèze)
+EXPAND_MISSING_MAX = 0.04  # côté sans bord net : au plus l'épaisseur de la bordure noire (fraction du petit côté) au-delà
+                           # du contour de départ (cadre coloré) ; placé d'après les proportions, une caméra en biais
+                           # l'envoyait sur la paroi de la boîte
 
 
 def _outer_edge(gray: np.ndarray, a: np.ndarray, b: np.ndarray, n: np.ndarray, reach: int):
@@ -211,8 +214,13 @@ def _one_missing(gray, q, normals, lines):
     along = float(np.linalg.norm(c1 - c3))                                      # longueur du côté opposé
     long_side = np.linalg.norm(q[(i + 1) % 4] - q[i]) > np.linalg.norm(q[(i + 2) % 4] - q[(i + 1) % 4])
     gap = along * RATIO if long_side else along / RATIO
+    placed = (c1 + c3) / 2 - gap * normals[(i + 2) % 4]
+    side = (q[i] + q[(i + 1) % 4]) / 2
+    reach = EXPAND_MISSING_MAX * min(np.linalg.norm(q[1] - q[0]), np.linalg.norm(q[3] - q[0]))
+    if float(np.dot(placed - side, normals[i])) > reach:
+        placed = side + reach * normals[i]
     lines = list(lines)
-    lines[i] = ((c1 + c3) / 2 - gap * normals[(i + 2) % 4], opp[1])
+    lines[i] = (placed, opp[1])
     return _check(gray, q, lines)
 
 

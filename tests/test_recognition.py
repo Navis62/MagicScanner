@@ -283,3 +283,55 @@ def test_a_set_code_misread_by_one_character_still_counts():
     best = catalog.card_info(rec.best.card_id, rec.lang)
     assert (best["name"], best["set_code"], best["collector_number"]) == ("Chandra's Outrage", "mm3", "92")
     con.close()
+
+
+def test_a_side_without_a_clear_edge_is_not_pushed_onto_the_box_wall():
+    """Photo webcam réelle : Cœur-dragon du Bogardân (MH1) couchée sur une pile. Le bas de la carte (à droite dans
+    l'image) n'a pas de bord net ; placé d'après les proportions d'une carte, il partait sur la paroi de la boîte (caméra
+    en biais) : carte 20 % trop grande, ligne du bas illisible, réédition J22 retenue au lieu de MH1."""
+    corners = detect.find_card(cv2.imread(str(FIXTURES / "bogardan_dragonheart_mh1_fr_estimated_too_big.jpg")),
+                               "landscape")
+    assert corners is not None
+    assert corners[:, 0].max() < 1000 + 30 and corners[:, 0].min() > 300 - 30
+
+
+MH1_CARDS = {
+    "bogardan_dragonheart_mh1_fr_estimated_too_big": ("Bogardan Dragonheart", "mh1", "120"),
+    "reckless_charge_mh1_fr_playmat_title": ("Reckless Charge", "mh1", "144"),
+}
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not DB_PATH.exists(), reason="base non importée")
+@pytest.mark.parametrize("name", MH1_CARDS)
+def test_mh1_cards_on_a_pile_are_identified(name):
+    """Photos webcam réelles (MH1 en VF, couchées sur une pile). Charge téméraire : le titre lu était « CHT », du mot
+    « ECHT » du tapis, pris pour le jeton « Chat »."""
+    from magicscanner import db
+    from magicscanner.catalog import Catalog
+    from magicscanner.recognition import Recognizer
+
+    con = db.connect()
+    catalog = Catalog(con)
+    rec = Recognizer(catalog).recognize(cv2.imread(str(FIXTURES / f"{name}.jpg")), orientation="landscape")
+    best = catalog.card_info(rec.best.card_id, rec.lang)
+    assert rec.ok and rec.lang == "fr"
+    assert (best["name"], best["set_code"], best["collector_number"]) == MH1_CARDS[name]
+    con.close()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not DB_PATH.exists(), reason="base non importée")
+def test_a_blurry_card_is_not_named_after_its_type_line():
+    """Photo webcam réelle, floue : Souiller (MH1). Le titre est illisible ; la ligne de type « Éphémère » donnait la carte
+    « Ephemerate » (3 scans faux de suite). Mieux vaut un échec, qui fait rescanner."""
+    from magicscanner import db
+    from magicscanner.catalog import Catalog
+    from magicscanner.recognition import Recognizer
+
+    con = db.connect()
+    catalog = Catalog(con)
+    rec = Recognizer(catalog).recognize(cv2.imread(str(FIXTURES / "defile_mh1_fr_blurry_type_as_title.jpg")),
+                                        orientation="landscape")
+    assert not rec.ok or catalog.card_info(rec.best.card_id, rec.lang)["name"] in ("Defile",)
+    con.close()
