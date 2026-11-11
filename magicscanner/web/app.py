@@ -88,16 +88,17 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="MagicScanner", lifespan=lifespan)
 
 
-class FreshStaticFiles(StaticFiles):
-    """Le navigateur revalide les fichiers à chaque chargement : une mise à jour du JS/CSS est vue sans vider le cache."""
-
-    async def get_response(self, path, scope):
-        response = await super().get_response(path, scope)
+@app.middleware("http")
+async def revalidate_interface(request, call_next):
+    """Page et fichiers de l'interface (HTML, JS, CSS) revalidés à chaque chargement, tous au même régime : une mise à
+    jour est vue sans vider le cache, et une ancienne page en cache ne tourne jamais avec un JS plus récent."""
+    response = await call_next(request)
+    if not request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-cache"
-        return response
+    return response
 
 
-app.mount("/static", FreshStaticFiles(directory=STATIC), name="static")
+app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 class CardChoice(BaseModel):
@@ -185,8 +186,7 @@ def _orientation(value: str) -> str | None:
 
 @app.get("/")
 def index():
-    # Revalidée comme le JS : sinon une ancienne page en cache peut tourner avec un JS plus récent (élément introuvable).
-    return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
+    return FileResponse(STATIC / "index.html")
 
 
 @app.post("/api/scan")
