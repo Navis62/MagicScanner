@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 from rapidfuzz import fuzz
+from rapidfuzz.distance import Levenshtein
 
 from ..catalog.lookup import normalize
 from . import visual
@@ -16,6 +17,7 @@ LIST_SET = "plst"          # The List + Mystery Booster dans Scryfall : numéros
 W_GLOBAL, W_SYMBOL, W_COLOR = 0.45, 0.45, 0.10
 # Bonus / malus.
 SET_CODE_READ = 0.50       # code d'édition lu en bas de carte (cadres récents)
+SET_CODE_NEAR = 0.25       # lu à un caractère près (« MMS » pour « MM3 » : texte minuscule sous la webcam)
 NUMBER_SIMILAR = 0.25      # × similarité « numéro/total » lu vs attendu
 NUMBER_EXACT = 0.15
 NOT_PRINTED_IN_FR = -0.15  # carte lue en VF mais édition jamais imprimée en français (selon Scryfall)
@@ -113,6 +115,10 @@ def score_printing(scan: np.ndarray, p: sqlite3.Row, ev: Evidence) -> Candidate:
     if ev.collector.set_code == code:
         score += SET_CODE_READ
         reasons.append("code édition lu")
+    elif (ev.collector.set_code and len(ev.collector.set_code) == len(code)
+          and Levenshtein.distance(ev.collector.set_code, code) == 1):
+        score += SET_CODE_NEAR
+        reasons.append("code édition approchant")
     if ev.collector.number:
         if not is_list:   # pour The List on ne connaît pas le total imprimé (celui de l'édition d'origine)
             read = f"{ev.collector.number}/{ev.collector.total or ''}"

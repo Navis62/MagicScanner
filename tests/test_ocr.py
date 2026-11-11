@@ -35,6 +35,11 @@ def test_collector_number_and_set_code_new_frame():
     assert info == CollectorInfo("87", None, "c13")
 
 
+def test_set_code_glued_to_the_artist_name():
+    """Recover (MM3), photo webcam : l'OCR colle le nom de l'illustrateur à la langue (« MM3-EN » + « BASTIEN »)."""
+    assert collector_info([line("082/249", 0.958), line("MM3-ENBASTIEN L DEHARME", 0.965)]).set_code == "mm3"
+
+
 def test_collector_ignores_text_outside_bottom():
     assert collector_info([line("4/4", 0.5)]) == CollectorInfo()
 

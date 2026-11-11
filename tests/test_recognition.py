@@ -254,3 +254,21 @@ def test_a_modern_frame_card_on_a_pile_is_identified(name):
     assert (best["name"], best["set_code"], best["collector_number"]) == expected
     assert "numéro lu" in rec.best.reasons
     con.close()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not DB_PATH.exists(), reason="base non importée")
+def test_a_set_code_misread_by_one_character_still_counts():
+    """Photo webcam réelle : Chandra's Outrage MM3 lue « MMS·EN » et « 002/249 ». Le code exact ne correspondait à aucune
+    impression et la réédition A25, au cadre identique, l'emportait."""
+    from magicscanner import db
+    from magicscanner.catalog import Catalog
+    from magicscanner.recognition import Recognizer
+
+    con = db.connect()
+    catalog = Catalog(con)
+    rec = Recognizer(catalog).recognize(cv2.imread(str(FIXTURES / "chandras_outrage_mm3_en_set_code_misread.jpg")),
+                                        orientation="landscape")
+    best = catalog.card_info(rec.best.card_id, rec.lang)
+    assert (best["name"], best["set_code"], best["collector_number"]) == ("Chandra's Outrage", "mm3", "92")
+    con.close()

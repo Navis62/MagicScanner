@@ -134,7 +134,7 @@ def collector_info(lines: list[OcrLine]) -> CollectorInfo:
     for text in (l.text for l in lines if l.y > 0.88):
         if number is None and (m := re.search(r"(\d{1,4})\s*/\s*(\d{2,4})", text)):
             number, total = _strip_zeros(m.group(1)), _strip_zeros(m.group(2))
-        if set_code is None and (m := re.search(r"\b([A-Z0-9]{3,5})\s*[•·.*\-]\s*(EN|FR)\b", text.upper())):
+        if set_code is None and (m := re.search(r"\b([A-Z0-9]{3,5})\s*[•·.*\-]\s*(EN|FR)", text.upper())):   # « MM3-ENBASTIEN » : nom de l'illustrateur collé
             set_code = m.group(1).lower()
         if number is None and (m := RECENT_NUMBER.match(text)):
             number = _strip_zeros(m.group(1) or m.group(2))  # cadre récent : « 0087 U » ou, selon l'édition, « C 0126 »
