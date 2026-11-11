@@ -9,8 +9,13 @@ RATIO = 63 / 88
 MIN_DETAIL = 0.03  # part de pixels de contour à l'intérieur : une carte (illustration, texte) en a 13 % et plus,
                    # un rectangle uni (panneau de carton de la boîte, aux proportions d'une carte) presque 0
 EDGE_MARGIN = 3   # pixels (image réduite) : un quadrilatère qui touche le bord de l'image n'est pas la carte
+RATIO_TOL = 0.16  # écart de proportions admis : caméra en biais au-dessus de la boîte, la carte couchée apparaît en
+                  # trapèze dont le rectangle englobant s'écarte de 13 à 14 % des proportions d'une carte
 NESTED_MAX = 0.8  # rectangle de secours qui contient un cadre de carte plus petit que ça (en surface) : c'est
                   # l'intérieur de la boîte autour de la carte (photos de pile : ~0,5 ; une carte et son cadre : ~1)
+# Cadre de l'illustration dans la carte (gauche, haut, droite, bas en fractions), le même à ~1 % près de 8th Edition aux
+# cadres M15 (mesuré sur les images Scryfall de 10E, RAV, M10, M14, KTK, MM2, EMA).
+ART_BOX = (0.08, 0.114, 0.922, 0.557)
 
 
 def order(pts: np.ndarray) -> np.ndarray:
@@ -20,14 +25,20 @@ def order(pts: np.ndarray) -> np.ndarray:
     return np.array([pts[s.argmin()], pts[d.argmin()], pts[s.argmax()], pts[d.argmax()]], dtype=np.float32)
 
 
+def _inside(quad: np.ndarray, frame_shape: tuple[int, int]) -> bool:
+    """Le quadrilatère ne touche pas le bord de l'image."""
+    frame_h, frame_w = frame_shape
+    xs, ys = quad[:, 0], quad[:, 1]
+    return (xs.min() >= EDGE_MARGIN and ys.min() >= EDGE_MARGIN
+            and xs.max() <= frame_w - 1 - EDGE_MARGIN and ys.max() <= frame_h - 1 - EDGE_MARGIN)
+
+
 def _score(quad: np.ndarray, frame_shape: tuple[int, int]) -> float | None:
     frame_h, frame_w = frame_shape
     frame_area = frame_h * frame_w
     # Contour coupé par le bord de l'image (fond, tapis, boîte entière) : il peut avoir par hasard les proportions d'une
     # carte et, plus grand qu'elle, l'emporter sur la vraie carte posée dans la boîte.
-    xs, ys = quad[:, 0], quad[:, 1]
-    if (xs.min() < EDGE_MARGIN or ys.min() < EDGE_MARGIN
-            or xs.max() > frame_w - 1 - EDGE_MARGIN or ys.max() > frame_h - 1 - EDGE_MARGIN):
+    if not _inside(quad, frame_shape):
         return None
     rect = cv2.minAreaRect(quad.astype(np.float32))
     w, h = sorted(rect[1])
@@ -37,13 +48,34 @@ def _score(quad: np.ndarray, frame_shape: tuple[int, int]) -> float | None:
     if not 0.02 * frame_area < area < 0.9 * frame_area:
         return None
     ratio_err = abs(w / h - RATIO) / RATIO
-    if ratio_err > 0.12:
+    if ratio_err > RATIO_TOL:
         return None
     # Rectangularité : le contour doit remplir son rectangle englobant.
     fill = cv2.contourArea(quad.astype(np.float32)) / area
     if fill < 0.85:
         return None
     return area * (1 - ratio_err) * fill
+
+
+def _oriented(quad: np.ndarray, orientation: str | None) -> bool:
+    """Le quadrilatère est-il couché dans le sens attendu de la carte ? Le cadre de l'illustration (1,36 de large pour 1
+    de haut) a, tourné d'un quart de tour, les proportions d'une carte : quand le bord de la carte se perd dans la pile,
+    c'est lui qui l'emportait. Il est perpendiculaire à la carte : un contour dans l'autre sens n'est pas elle."""
+    if orientation is None:
+        return True
+    q = order(quad)
+    across = np.linalg.norm(q[1] - q[0]) + np.linalg.norm(q[2] - q[3])
+    down = np.linalg.norm(q[3] - q[0]) + np.linalg.norm(q[2] - q[1])
+    return (across > down) == (orientation == "landscape")
+
+
+def _card_around_art(art: np.ndarray, orientation: str) -> np.ndarray:
+    """Coins de la carte déduits du cadre de son illustration (titre à gauche de l'image si elle est couchée)."""
+    q = order(art)
+    in_card = q[[3, 0, 1, 2]] if orientation == "landscape" else q   # coins de l'illustration dans l'ordre de la carte
+    x0, y0, x1, y1 = ART_BOX
+    m = cv2.getPerspectiveTransform(np.float32([[x0, y0], [x1, y0], [x1, y1], [x0, y1]]), in_card)
+    return order(cv2.perspectiveTransform(np.float32([[[0, 0]], [[1, 0]], [[1, 1]], [[0, 1]]]), m).reshape(4, 2))
 
 
 def _has_detail(small: np.ndarray, quad: np.ndarray) -> bool:
@@ -67,7 +99,8 @@ EXPAND_DARK = 90     # luminosité moyenne maximale de la bande traversée (bord
 EXPAND_LIGHT = 30    # au-delà du saut, le fond reste plus clair que la bande d'au moins ça (pas une lettre du titre)
 EXPAND_SAMPLES = 31  # points de mesure le long de chaque côté
 EXPAND_MIN_HITS = 0.4  # part des points où le bord est trouvé pour que le côté compte
-EXPAND_RATIO = 0.06  # tolérance sur les proportions du quadrilatère agrandi
+EXPAND_RATIO = 0.10  # tolérance sur les proportions du quadrilatère agrandi quand un côté est déduit des proportions
+                     # (quatre bords réellement trouvés : RATIO_TOL, la caméra en biais en fait un trapèze)
 
 
 def _outer_edge(gray: np.ndarray, a: np.ndarray, b: np.ndarray, n: np.ndarray, reach: int):
@@ -126,14 +159,14 @@ def _expand(gray: np.ndarray, quad: np.ndarray) -> np.ndarray:
     return quad if grown is None else grown
 
 
-def _check(gray: np.ndarray, q: np.ndarray, lines) -> np.ndarray | None:
+def _check(gray: np.ndarray, q: np.ndarray, lines, tol: float = EXPAND_RATIO) -> np.ndarray | None:
     """Quadrilatère formé par les quatre droites, s'il a les proportions d'une carte et contient la zone de départ."""
     corners = [_intersect(lines[i - 1], lines[i]) for i in range(4)]
     if any(c is None for c in corners):
         return None
     grown = order(np.float32(corners))
     w, h = sorted(cv2.minAreaRect(grown)[1])
-    if (h == 0 or abs(w / h - RATIO) / RATIO > EXPAND_RATIO or _score(grown, gray.shape[:2]) is None
+    if (h == 0 or abs(w / h - RATIO) / RATIO > tol or _score(grown, gray.shape[:2]) is None
             or cv2.contourArea(grown) < 0.9 * cv2.contourArea(q)):
         return None
     return grown
@@ -141,7 +174,7 @@ def _check(gray: np.ndarray, q: np.ndarray, lines) -> np.ndarray | None:
 
 def _grown(gray, q, lines):
     """Les quatre bords trouvés."""
-    return None if any(l is None for l in lines) else _check(gray, q, lines)
+    return None if any(l is None for l in lines) else _check(gray, q, lines, RATIO_TOL)
 
 
 def _symmetric(gray, q, normals, lines):
@@ -202,7 +235,7 @@ def find_card(frame: np.ndarray, orientation: str | None = None) -> np.ndarray |
     scale = min(scale, 1.0)
     gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (5, 5), 0)
-    candidates, hulls = [], []
+    candidates, hulls, arts = [], [], []
     area = small.shape[0] * small.shape[1]
     edges_list = [cv2.Canny(gray, lo, hi) for lo, hi in ((30, 90), (60, 180))]
     # Bords sombres de la carte : seuillage adaptatif en complément de Canny.
@@ -221,8 +254,13 @@ def find_card(frame: np.ndarray, orientation: str | None = None) -> np.ndarray |
                 # ensuite jusqu'au bord de la carte.
                 quad, found = _quad(cv2.convexHull(c)), hulls
             if quad is not None and (sc := _score(quad, small.shape[:2])):
-                found.append((sc, quad))
+                (found if _oriented(quad, orientation) else arts).append((sc, quad))
     best = next((q for _, q in sorted(candidates, key=lambda c: -c[0]) if _has_detail(small, q)), None)
+    if best is None and orientation is not None:
+        # Contour dans l'autre sens que la carte : le cadre de son illustration. La carte est autour ; ses proportions
+        # sont justes par construction (une caméra en biais en fait un trapèze que `_score` refuserait).
+        around = (_card_around_art(q, orientation) for _, q in sorted(arts, key=lambda c: -c[0]))
+        best = next((c for c in around if _inside(c, small.shape[:2]) and _has_detail(small, c)), None)
     if best is None:
         # Contours fusionnés avec la boîte ou la pile de cartes : on cherche plutôt un rectangle bien soutenu par des
         # bords. S'il contient le cadre coloré d'une carte (enveloppe convexe) bien plus petit que lui, c'est l'intérieur

@@ -176,7 +176,8 @@ def test_a_flavor_line_read_as_title_does_not_name_the_card():
 # dans la tranche noire des cartes du dessous ; seul son cadre coloré, d'où dépasse la boîte de force / endurance, est net.
 PILE_CARDS = {
     "mammoth_spider_dom_fr_box_pile_slow": ((715, 260, 1480, 880), ("Mammoth Spider", "dom", "171")),
-    "nature_spiral_dom_fr_box_pile_slow": ((600, 280, 1355, 870), ("Nature's Spiral", "dom", "175")),
+    # x1 : coin bas-droit de la bordure noire (carte penchée), et non du cadre coloré seul comme relevé au départ.
+    "nature_spiral_dom_fr_box_pile_slow": ((600, 280, 1395, 870), ("Nature's Spiral", "dom", "175")),
 }
 
 
@@ -209,4 +210,47 @@ def test_the_top_card_of_a_pile_is_identified_without_the_slow_fallback(name):
     assert rec.ok and rec.lang == "fr"
     assert (best["name"], best["set_code"], best["collector_number"]) == expected
     assert "texte" not in rec.timings   # trouvée par son contour, pas par la localisation par le texte
+    con.close()
+
+
+# Cadre moderne (M15 et après) couché sur une pile : le bord noir se perd dans la pile, et le cadre de l'illustration
+# (1,36 de large pour 1 de haut), debout dans l'image, a les proportions d'une carte droite. Il était pris pour la
+# carte : pas de titre, secours lent par le texte, ligne du bas (numéro, code d'édition) perdue, mauvaise impression.
+ART_BOX_CARDS = {
+    "sentinel_spider_ema_en_art_box": ((330, 250, 1020, 805), ("Sentinel Spider", "ema", "185")),
+    "madcap_skills_mm3_en_art_box": ((345, 220, 1000, 762), ("Madcap Skills", "mm3", "99")),
+    "opportunity_mm3_en_art_box": ((400, 230, 1050, 790), ("Opportunity", "mm3", "45")),
+    "thrive_mm2_en_art_box": ((358, 185, 1030, 775), ("Thrive", "mm2", "166")),
+}
+
+
+@pytest.mark.parametrize("name", ART_BOX_CARDS)
+def test_the_card_is_found_rather_than_its_illustration(name):
+    """Photo webcam réelle : carte au cadre moderne couchée sur une pile, aperçu tourné à 90°."""
+    (x0, y0, x1, y1), _ = ART_BOX_CARDS[name]
+    corners = detect.find_card(cv2.imread(str(FIXTURES / f"{name}.jpg")), "landscape")
+    assert corners is not None
+    margin = 30
+    assert (corners[:, 0] >= x0 - margin).all() and (corners[:, 0] <= x1 + margin).all()
+    assert (corners[:, 1] >= y0 - margin).all() and (corners[:, 1] <= y1 + margin).all()
+    assert cv2.contourArea(corners) > 0.7 * (x1 - x0) * (y1 - y0)
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not DB_PATH.exists(), reason="base non importée")
+@pytest.mark.parametrize("name", ART_BOX_CARDS)
+def test_a_modern_frame_card_on_a_pile_is_identified(name):
+    """Photo webcam réelle : l'impression se joue sur la ligne du bas (numéro, code d'édition), qui doit être lue."""
+    from magicscanner import db
+    from magicscanner.catalog import Catalog
+    from magicscanner.recognition import Recognizer
+
+    _, expected = ART_BOX_CARDS[name]
+    con = db.connect()
+    catalog = Catalog(con)
+    rec = Recognizer(catalog).recognize(cv2.imread(str(FIXTURES / f"{name}.jpg")), orientation="landscape")
+    best = catalog.card_info(rec.best.card_id, rec.lang)
+    assert rec.ok and rec.lang == "en"
+    assert (best["name"], best["set_code"], best["collector_number"]) == expected
+    assert "numéro lu" in rec.best.reasons
     con.close()

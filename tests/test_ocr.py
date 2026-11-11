@@ -76,3 +76,10 @@ def test_title_and_footer_too_close_give_no_card():
 def test_sideways_titles_keep_short_lines_only():
     lines = [line("Error", 0.30), line("Counter target multicolored spell, then draw a card", 0.5), line("Trial", 0.1)]
     assert ocr.sideways_titles(lines) == ["Trial", "Error"]
+
+
+def test_sideways_titles_ignore_the_copyright_line():
+    """Bone Splinters (MM3) donnée comme le jeton « Wizard » : lue de côté, la ligne « ™ & © 2017 Wizards of the Coast »
+    arrive en morceaux et « Wizards » ressemble à 92 % au nom du jeton. Le copyright n'est jamais un nom de carte."""
+    lines = [line("Wizards", 0.2), line("of the Coast", 0.3), line("™ & © 2017", 0.1), line("Bone Splinters", 0.4)]
+    assert ocr.sideways_titles(lines) == ["Bone Splinters"]
