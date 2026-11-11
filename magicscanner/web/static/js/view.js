@@ -68,6 +68,7 @@ export function showCard(card, lang, confidence = null, needsReview = false) {
   $("conf").textContent = confidence != null ? `confiance ${Math.round(confidence * 100)} %` : "";
   $("conf").className = "badge conf " + (confidence == null ? "" : needsReview ? "mid" : "high");
   $("set-icon").src = card.set_icon || "";
+  $("set-pick").dataset.code = card.set_code;
   $("set-name").textContent = `${card.set_name} (${card.set_code.toUpperCase()}) — ${card.set_date || ""}`;
   $("number").textContent = card.collector_number;
   $("list-badge").hidden = !card.is_list;

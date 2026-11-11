@@ -61,4 +61,12 @@ export async function initEdition() {
     e.target.blur();
   });
   $("locked-set-clear").addEventListener("click", () => { lock(""); setStatus("Toutes les éditions", "ok"); });
+  // Clic sur l'édition de la carte affichée : la fixe (re-clic sur l'édition déjà fixée : retour à toutes les éditions).
+  $("set-pick").addEventListener("click", (e) => {
+    const code = e.currentTarget.dataset.code;
+    if (!code) return;
+    lock(code === locked ? "" : code);
+    setStatus(locked ? `Édition fixée : ${names.get(locked)} — les cartes d'une autre édition sont signalées`
+      : "Toutes les éditions", "ok");
+  });
 }

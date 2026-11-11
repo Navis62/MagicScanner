@@ -66,7 +66,8 @@ et inversement).
 **Édition fixée** : pour un paquet d'une seule édition, le champ « Édition » (touche `E`, nom ou code de l'édition) limite
 la reconnaissance aux cartes de cette édition, avec leurs noms VO comme VF. C'est plus rapide (seules ses impressions sont comparées)
 et il y a moins de confusions possibles. Une carte d'une autre édition glissée dans le paquet est quand même reconnue si son nom est lu nettement
-mieux, mais elle est signalée en orange (« hors de l'édition fixée »). Le choix est mémorisé ; ✕ revient à toutes les éditions.
+mieux, mais elle est signalée en orange (« hors de l'édition fixée »). Un clic sur l'édition de la carte scannée (ligne
+« Édition » de la fiche) la fixe directement ; un second clic la libère. Le choix est mémorisé ; ✕ revient à toutes les éditions.
 
 Un cadre orange = confiance faible ou choix ambigu entre deux impressions (autre produit Cardmarket) : à vérifier.
 Le prix tendance Cardmarket (foil si la case est cochée) est affiché ; si elle dépasse le prix de vente de plus du seuil réglable

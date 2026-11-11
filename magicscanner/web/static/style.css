@@ -254,6 +254,8 @@ dt, dd { padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
 dt { color: var(--faint); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; display: flex; align-items: center; }
 dd { margin: 0; font-size: 15px; min-width: 0; font-variant-numeric: tabular-nums; }
 .set-icon { width: 22px; height: 22px; vertical-align: middle; margin-right: 4px; filter: invert(1) opacity(.9); }
+.set-pick[data-code] { cursor: pointer; }
+.set-pick[data-code]:hover #set-name { text-decoration: underline; }
 .set-icon:not([src]), .set-icon[src=""] { display: none; }
 #trend.alert { color: var(--warn); font-weight: 700; }
 #cm-url.link-btn { display: inline-block; padding: 5px 12px; font-size: 13px; font-weight: 500; text-decoration: none;
