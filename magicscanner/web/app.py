@@ -185,7 +185,8 @@ def _orientation(value: str) -> str | None:
 
 @app.get("/")
 def index():
-    return FileResponse(STATIC / "index.html")
+    # Revalidée comme le JS : sinon une ancienne page en cache peut tourner avec un JS plus récent (élément introuvable).
+    return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
 
 
 @app.post("/api/scan")
