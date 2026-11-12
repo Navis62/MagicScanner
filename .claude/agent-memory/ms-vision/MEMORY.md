@@ -1,0 +1,2 @@
+- [Orientation et cadre d'illustration](orientation-art-box.md) — critère « la carte déduite tient dans l'image » ; indices essayés en vain pour Gargantua
+- [Lecture du code d'édition](set-code-reading.md) — lignes OCR réelles, codes de 3 caractères, bonus « approchant » réservé aux codes inconnus

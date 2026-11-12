@@ -1,0 +1,2 @@
+- [Orientation toujours posée](detect_orientation_always_set.md) — l'UI n'envoie jamais orientation=None ; tester find_card dans les 3 modes
+- [Quads mal orientés en concurrence](detect_misoriented_quads_compete.md) — grand panneau perpendiculaire bat la carte ; méthode de comparaison ancien/nouveau
