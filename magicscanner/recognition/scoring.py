@@ -57,6 +57,9 @@ class Evidence:
     foil: bool = False              # case « foil » cochée au moment du scan
     power_toughness: tuple[str, str] | None = None   # force / endurance lues en bas à droite
     artist_text: str = ""           # texte lu en bas à gauche
+    # Codes d'édition imprimés sur les impressions candidates : un code lu qui en fait partie a été lu exactement, les
+    # éditions à un caractère de lui (MM2 pour MM3) ne sont pas des lectures « approchantes ».
+    candidate_codes: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -115,8 +118,8 @@ def score_printing(scan: np.ndarray, p: sqlite3.Row, ev: Evidence) -> Candidate:
     if ev.collector.set_code == code:
         score += SET_CODE_READ
         reasons.append("code édition lu")
-    elif (ev.collector.set_code and len(ev.collector.set_code) == len(code)
-          and Levenshtein.distance(ev.collector.set_code, code) == 1):
+    elif (ev.collector.set_code and ev.collector.set_code not in ev.candidate_codes
+          and len(ev.collector.set_code) == len(code) and Levenshtein.distance(ev.collector.set_code, code) == 1):
         score += SET_CODE_NEAR
         reasons.append("code édition approchant")
     if ev.collector.number:

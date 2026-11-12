@@ -8,7 +8,13 @@ import numpy as np
 
 from ..catalog import Catalog, NameMatch
 from . import detect, list_symbol, ocr
-from .scoring import Candidate, Evidence, identity_score, score_printing
+from .scoring import (
+    Candidate,
+    Evidence,
+    identity_score,
+    printed_identity,
+    score_printing,
+)
 
 NAME_TIE_MARGIN = 5     # noms gardés en lice s'ils sont à moins de 5 points du meilleur
 MAX_ORACLES = 3
@@ -222,6 +228,12 @@ class Recognizer:
         near = [m for m in matches if m.score >= best_name.score - NAME_TIE_MARGIN]
         tied = [m for m in near if m.score == best_name.score]
         contenders = tied[:MAX_TIED_ORACLES] if len(tied) > MAX_ORACLES else near[:MAX_ORACLES]
+        printings = self.catalog.printings([m.oracle_id for m in contenders])
+        if locked_set:
+            family = self.catalog.set_family(locked_set)
+            in_set = [p for p in printings if p["set_code"] in family]
+            rec.off_set = not in_set
+            printings = in_set or printings
         evidence = Evidence(
             lang=rec.lang,
             collector=ocr.collector_info(lines),
@@ -232,13 +244,8 @@ class Recognizer:
             list_symbol=list_symbol.evidence(rec.list_symbol),
             power_toughness=ocr.power_toughness(lines),
             artist_text=ocr.artist_text(lines),
+            candidate_codes=frozenset(printed_identity(p)[0] for p in printings),
         )
-        printings = self.catalog.printings([m.oracle_id for m in contenders])
-        if locked_set:
-            family = self.catalog.set_family(locked_set)
-            in_set = [p for p in printings if p["set_code"] in family]
-            rec.off_set = not in_set
-            printings = in_set or printings
         if len(printings) > MAX_PRINTINGS:
             printings = sorted(printings, key=lambda p: -identity_score(p, evidence))[:MAX_PRINTINGS]
         rec.candidates = sorted(self._pool.map(lambda p: score_printing(card, p, evidence), printings),
