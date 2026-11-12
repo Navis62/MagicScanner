@@ -232,19 +232,60 @@ ART_BOX_CARDS = {
     "madcap_skills_mm3_en_art_box": ((345, 220, 1000, 762), ("Madcap Skills", "mm3", "99")),
     "opportunity_mm3_en_art_box": ((400, 230, 1050, 790), ("Opportunity", "mm3", "45")),
     "thrive_mm2_en_art_box": ((358, 185, 1030, 775), ("Thrive", "mm2", "166")),
+    # Seul le cadre de l'illustration a un contour net : la carte est déduite autour de lui.
+    "gravedigger_ema_en_art_box_only": ((275, 235, 955, 760), ("Gravedigger", "ema", "89")),
 }
+
+
+def _within(corners, bounds, margin=30):
+    """Les coins tiennent dans les bornes relevées (x0, y0, x1, y1) et couvrent l'essentiel de leur surface."""
+    x0, y0, x1, y1 = bounds
+    return (corners is not None
+            and (corners[:, 0] >= x0 - margin).all() and (corners[:, 0] <= x1 + margin).all()
+            and (corners[:, 1] >= y0 - margin).all() and (corners[:, 1] <= y1 + margin).all()
+            and cv2.contourArea(corners) > 0.7 * (x1 - x0) * (y1 - y0))
 
 
 @pytest.mark.parametrize("name", ART_BOX_CARDS)
 def test_the_card_is_found_rather_than_its_illustration(name):
     """Photo webcam réelle : carte au cadre moderne couchée sur une pile, aperçu tourné à 90°."""
-    (x0, y0, x1, y1), _ = ART_BOX_CARDS[name]
+    bounds, _ = ART_BOX_CARDS[name]
+    assert _within(detect.find_card(cv2.imread(str(FIXTURES / f"{name}.jpg")), "landscape"), bounds)
+
+
+# Annoncé en portrait, le cadre de l'illustration de Gravedigger, seul contour net, a le sens d'une carte droite : rien
+# ne le distingue d'une carte (comme sans orientation), il en est exclu.
+SIDEWAYS_CARDS = {name: bounds for name, (bounds, _) in {**ART_BOX_CARDS, **PILE_CARDS}.items()
+                  if name != "gravedigger_ema_en_art_box_only"}
+
+
+@pytest.mark.parametrize("name", SIDEWAYS_CARDS)
+def test_a_sideways_card_is_found_when_the_preview_is_upright(name):
+    """Carte couchée, aperçu laissé droit (↻ oublié) : l'interface annonce une carte en portrait. Son contour, couché,
+    ne peut pas être le cadre d'une illustration (la carte déduite autour sortirait de l'image) : c'est la carte."""
+    corners = detect.find_card(cv2.imread(str(FIXTURES / f"{name}.jpg")), "portrait")
+    assert _within(corners, SIDEWAYS_CARDS[name])
+
+
+def test_a_card_in_the_announced_direction_wins_over_a_larger_perpendicular_panel():
+    """Carte couchée, aperçu tourné, posée sur un panneau (couvercle, feuille) debout aux proportions d'une carte : le
+    panneau, plus grand, est dans l'autre sens que la carte annoncée ; il ne passe qu'à défaut de mieux."""
+    img = np.full((1080, 1920, 3), 40, np.uint8)
+    cv2.rectangle(img, (640, 90), (640 + 640, 90 + 894), (175, 180, 185), -1)       # panneau debout
+    x, y = 710, 360
+    cv2.rectangle(img, (x, y), (x + 500, y + 350), (20, 20, 20), -1)                 # carte couchée : bordure noire
+    cv2.rectangle(img, (x + 18, y + 18), (x + 482, y + 332), (200, 210, 220), -1)    # cadre clair
+    cv2.rectangle(img, (x + 70, y + 35), (x + 280, y + 315), (60, 120, 90), -1)      # illustration
+    for i in range(8):                                                               # lignes de texte
+        cv2.line(img, (x + 300 + 20 * i, y + 50), (x + 300 + 20 * i, y + 300), (30, 30, 30), 3)
+    assert _within(detect.find_card(img, "landscape"), (x, y, x + 500, y + 350), margin=10)
+
+
+@pytest.mark.parametrize("name", ["borderless_spiderman_failed", "borderless_spiderman_weak_edge"])
+def test_an_upright_card_is_found_when_the_preview_is_turned(name):
+    """Carte droite, aperçu tourné à 90° : l'interface annonce une carte couchée."""
     corners = detect.find_card(cv2.imread(str(FIXTURES / f"{name}.jpg")), "landscape")
-    assert corners is not None
-    margin = 30
-    assert (corners[:, 0] >= x0 - margin).all() and (corners[:, 0] <= x1 + margin).all()
-    assert (corners[:, 1] >= y0 - margin).all() and (corners[:, 1] <= y1 + margin).all()
-    assert cv2.contourArea(corners) > 0.7 * (x1 - x0) * (y1 - y0)
+    assert corners is not None and np.abs(corners - STUCK_CARD).max() < 30
 
 
 @pytest.mark.integration

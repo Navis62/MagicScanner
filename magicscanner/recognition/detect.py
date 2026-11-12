@@ -8,6 +8,7 @@ CARD_W, CARD_H = 630, 880
 RATIO = 63 / 88
 MIN_DETAIL = 0.03  # part de pixels de contour à l'intérieur : une carte (illustration, texte) en a 13 % et plus,
                    # un rectangle uni (panneau de carton de la boîte, aux proportions d'une carte) presque 0
+DETAIL_H = 176     # hauteur (px) de la carte redressée pour mesurer ce contenu
 EDGE_MARGIN = 3   # pixels (image réduite) : un quadrilatère qui touche le bord de l'image n'est pas la carte
 RATIO_TOL = 0.16  # écart de proportions admis : caméra en biais au-dessus de la boîte, la carte couchée apparaît en
                   # trapèze dont le rectangle englobant s'écarte de 13 à 14 % des proportions d'une carte
@@ -60,7 +61,8 @@ def _score(quad: np.ndarray, frame_shape: tuple[int, int]) -> float | None:
 def _oriented(quad: np.ndarray, orientation: str | None) -> bool:
     """Le quadrilatère est-il couché dans le sens attendu de la carte ? Le cadre de l'illustration (1,36 de large pour 1
     de haut) a, tourné d'un quart de tour, les proportions d'une carte : quand le bord de la carte se perd dans la pile,
-    c'est lui qui l'emportait. Il est perpendiculaire à la carte : un contour dans l'autre sens n'est pas elle."""
+    c'est lui qui l'emportait. Il est perpendiculaire à la carte. Mais un contour dans l'autre sens peut aussi être la
+    carte, posée dans l'autre sens que l'aperçu (↻ oublié) : `find_card` départage."""
     if orientation is None:
         return True
     q = order(quad)
@@ -78,11 +80,20 @@ def _card_around_art(art: np.ndarray, orientation: str) -> np.ndarray:
     return order(cv2.perspectiveTransform(np.float32([[[0, 0]], [[1, 0]], [[1, 1]], [[0, 1]]]), m).reshape(4, 2))
 
 
-def _has_detail(small: np.ndarray, quad: np.ndarray) -> bool:
-    """La surface délimitée contient-elle un contenu de carte (et pas un fond uni) ?"""
-    gray = cv2.cvtColor(warp(small, order(quad), 176), cv2.COLOR_BGR2GRAY)
+def _has_detail(small: np.ndarray, quad: np.ndarray, hole: np.ndarray | None = None) -> bool:
+    """La surface délimitée contient-elle un contenu de carte (et pas un fond uni) ? `hole` : quadrilatère intérieur
+    laissé de côté (le contenu doit être autour de lui)."""
+    gray = cv2.cvtColor(warp(small, order(quad), DETAIL_H), cv2.COLOR_BGR2GRAY)
     inner = gray[18:-18, 13:-13]   # sans la bordure
-    return (cv2.Canny(cv2.GaussianBlur(inner, (3, 3), 0), 40, 120) > 0).mean() >= MIN_DETAIL
+    edges = cv2.Canny(cv2.GaussianBlur(inner, (3, 3), 0), 40, 120) > 0
+    keep = np.ones(edges.shape, bool)
+    if hole is not None:
+        m = cv2.getPerspectiveTransform(_portrait(order(quad)), _target(DETAIL_H)[0])
+        pts = cv2.perspectiveTransform(order(hole).reshape(-1, 1, 2), m).reshape(-1, 2) - (13, 18)
+        inside = np.zeros(edges.shape, np.uint8)
+        cv2.fillPoly(inside, [pts.round().astype(np.int32)], 1)
+        keep = cv2.dilate(inside, np.ones((7, 7), np.uint8)) == 0   # sans le trait du contour intérieur
+    return bool(keep.any()) and edges[keep].mean() >= MIN_DETAIL
 
 
 def _nested(inner: np.ndarray, outer: np.ndarray) -> bool:
@@ -234,16 +245,10 @@ def _quad(shape: np.ndarray) -> np.ndarray | None:
     return None
 
 
-def find_card(frame: np.ndarray, orientation: str | None = None) -> np.ndarray | None:
-    """Retourne les 4 coins (ordonnés) du meilleur candidat carte, ou None. `orientation` ("portrait", "landscape" ou
-    None) : sens de la carte dans l'image, pour la recherche de secours."""
-    h, w = frame.shape[:2]
-    scale = 960 / max(h, w)
-    small = cv2.resize(frame, None, fx=scale, fy=scale) if scale < 1 else frame.copy()
-    scale = min(scale, 1.0)
-    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-    gray = cv2.GaussianBlur(gray, (5, 5), 0)
-    candidates, hulls, arts = [], [], []
+def _shapes(small: np.ndarray, gray: np.ndarray, orientation: str | None):
+    """Quadrilatères aux proportions d'une carte, notés : (contours nets, enveloppes convexes, cartes déduites d'un
+    cadre d'illustration, contours et enveloppes dans l'autre sens que la carte annoncée)."""
+    candidates, hulls, arts, sideways, sideways_hulls = [], [], [], [], []
     area = small.shape[0] * small.shape[1]
     edges_list = [cv2.Canny(gray, lo, hi) for lo, hi in ((30, 90), (60, 180))]
     # Bords sombres de la carte : seuillage adaptatif en complément de Canny.
@@ -254,31 +259,74 @@ def find_card(frame: np.ndarray, orientation: str | None = None) -> np.ndarray |
         for c in contours:
             if cv2.contourArea(c) < 0.02 * area:
                 continue
-            quad, found = _quad(c), candidates
+            quad, found, turned = _quad(c), candidates, sideways
             if quad is None:
                 # Pas 4 coins nets : le cadre coloré d'une carte posée sur une pile (son bord noir se perd dans la
                 # tranche noire des cartes du dessous), d'où dépasse la boîte de force / endurance. Son enveloppe
                 # convexe en a 4 ; elle ne sert qu'à défaut d'un vrai contour (moins précise), `_expand` l'agrandit
                 # ensuite jusqu'au bord de la carte.
-                quad, found = _quad(cv2.convexHull(c)), hulls
-            if quad is not None and (sc := _score(quad, small.shape[:2])):
-                (found if _oriented(quad, orientation) else arts).append((sc, quad))
-    best = next((q for _, q in sorted(candidates, key=lambda c: -c[0]) if _has_detail(small, q)), None)
-    if best is None and orientation is not None:
-        # Contour dans l'autre sens que la carte : le cadre de son illustration. La carte est autour ; ses proportions
-        # sont justes par construction (une caméra en biais en fait un trapèze que `_score` refuserait).
-        around = (_card_around_art(q, orientation) for _, q in sorted(arts, key=lambda c: -c[0]))
-        best = next((c for c in around if _inside(c, small.shape[:2]) and _has_detail(small, c)), None)
-    if best is None:
-        # Contours fusionnés avec la boîte ou la pile de cartes : on cherche plutôt un rectangle bien soutenu par des
-        # bords. S'il contient le cadre coloré d'une carte (enveloppe convexe) bien plus petit que lui, c'est l'intérieur
-        # de la boîte autour d'elle : la carte est ce cadre.
-        rect = card_rect.find_rect(small, orientation)
-        hull = next((q for _, q in sorted(hulls, key=lambda c: -c[0]) if _has_detail(small, q)), None)
-        best = hull if hull is not None and (rect is None or _nested(hull, rect)) else rect
-        if best is None or not _has_detail(small, best):
+                quad, found, turned = _quad(cv2.convexHull(c)), hulls, sideways_hulls
+            if quad is None or not (sc := _score(quad, small.shape[:2])):
+                continue
+            if not _oriented(quad, orientation):
+                # Contour dans l'autre sens que la carte annoncée : le cadre de son illustration, si la carte déduite
+                # autour tient dans l'image ; sinon, peut-être la carte, posée dans l'autre sens que l'aperçu.
+                around = _card_around_art(quad, orientation)
+                quad, found = (around, arts) if _inside(around, small.shape[:2]) else (quad, turned)
+            found.append((sc, quad))
+    return candidates, hulls, arts, sideways, sideways_hulls
+
+
+def _wholes(small: np.ndarray, scored: list, sideways: list) -> list:
+    """Quadrilatères dans le sens annoncé qui ne sont pas une partie (cadre de l'illustration…) d'un quadrilatère
+    perpendiculaire : contenus dans lui, alors qu'il a un contenu de carte autour d'eux (une carte posée sur un couvercle
+    uni, aux proportions d'une carte, reste la carte)."""
+    return [(sc, q) for sc, q in scored if not any(_nested(q, s) and _has_detail(small, s, hole=q) for _, s in sideways)]
+
+
+def _best(small: np.ndarray, scored: list) -> np.ndarray | None:
+    """Le quadrilatère le mieux noté qui contient un contenu de carte."""
+    return next((q for _, q in sorted(scored, key=lambda c: -c[0]) if _has_detail(small, q)), None)
+
+
+def find_card(frame: np.ndarray, orientation: str | None = None) -> np.ndarray | None:
+    """Retourne les 4 coins (ordonnés) du meilleur candidat carte, ou None. `orientation` ("portrait", "landscape" ou
+    None) : sens annoncé de la carte dans l'image."""
+    h, w = frame.shape[:2]
+    scale = 960 / max(h, w)
+    small = cv2.resize(frame, None, fx=scale, fy=scale) if scale < 1 else frame.copy()
+    scale = min(scale, 1.0)
+    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+    gray = cv2.GaussianBlur(gray, (5, 5), 0)
+    candidates, hulls, arts, sideways, sideways_hulls = _shapes(small, gray, orientation)
+    # Contour dans le sens annoncé ; à défaut, cadre de l'illustration : la carte est autour (ses proportions sont justes
+    # par construction ; une caméra en biais en fait un trapèze que `_score` refuserait) ; à défaut, contour dans
+    # l'autre sens, la carte posée dans l'autre sens que l'aperçu. Celui-ci passe après : un couvercle, une feuille
+    # debout sous une carte couchée en a les proportions, et il est plus grand qu'elle. Mais un contour dans le sens
+    # annoncé, contenu dans un contour perpendiculaire qui a un contenu de carte autour de lui (titre, texte ; un
+    # couvercle est uni), en est une partie (cadre de l'illustration) : la carte est le contour perpendiculaire.
+    candidates, hulls = _wholes(small, candidates, sideways), _wholes(small, hulls, sideways_hulls)
+    for scored in (candidates, arts, sideways):
+        if (best := _best(small, scored)) is not None:
+            break
+    else:
+        best = _fallback(small, hulls, sideways_hulls, orientation)
+        if best is None:
             return None
     return order(_expand(gray, best.astype(np.float32)) / scale)
+
+
+def _fallback(small: np.ndarray, hulls: list, sideways_hulls: list, orientation: str | None) -> np.ndarray | None:
+    """Contours fusionnés avec la boîte ou la pile de cartes : on cherche plutôt un rectangle bien soutenu par des
+    bords. S'il contient le cadre coloré d'une carte (enveloppe convexe) bien plus petit que lui, c'est l'intérieur de
+    la boîte autour d'elle : la carte est ce cadre. Un cadre coloré dans l'autre sens que la carte annoncée ne sert qu'à
+    défaut d'un cadre dans le bon sens ; la carte y est alors posée, et le rectangle est cherché dans les deux sens."""
+    hull = _best(small, hulls + sideways_hulls)
+    if hull is None:
+        hull = None
+    rect = card_rect.find_rect(small, orientation if hull is None or _oriented(hull, orientation) else None)
+    best = hull if hull is not None and (rect is None or _nested(hull, rect)) else rect
+    return best if best is not None and _has_detail(small, best) else None
 
 
 def _portrait(corners: np.ndarray) -> np.ndarray:

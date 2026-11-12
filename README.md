@@ -46,7 +46,9 @@ la détection. Sans zoom, la reconnaissance reçoit l'image entière.
 
 **Carte en paysage** : poser la carte couchée, **titre vers la gauche de l'image**, et mettre l'aperçu à 90° (↻). La
 rotation indique aussi au serveur le sens attendu de la carte (détection plus rapide et plus fiable) ; titre à droite,
-elle est quand même reconnue grâce à une relecture à 180°, un peu plus lente.
+elle est quand même reconnue grâce à une relecture à 180°, un peu plus lente. Une carte posée dans l'autre sens que
+l'aperçu (↻ oublié) est en général trouvée quand même, sauf une carte droite petite dans une image non zoomée avec l'aperçu
+tourné : son contour ressemble alors au cadre d'une illustration couchée (zoomer ou remettre l'aperçu droit).
 
 | Touche | Action |
 |---|---|
