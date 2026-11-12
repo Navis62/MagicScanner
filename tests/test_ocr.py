@@ -40,6 +40,26 @@ def test_set_code_glued_to_the_artist_name():
     assert collector_info([line("082/249", 0.958), line("MM3-ENBASTIEN L DEHARME", 0.965)]).set_code == "mm3"
 
 
+@pytest.mark.parametrize("text", ["Illus. Franz Vohwinkel", "ILLUS. FRANK FRAZETTA", "Jean-Francois Beaulieu",
+                                  "Illus. Ron Spencer"])
+def test_an_artist_line_is_not_a_set_code(text):
+    """« ILLUS. FR(ANZ) », « JEAN-FR(ANCOIS) » ont la forme « code · langue » collée à un nom ; un code imprimé a trois
+    caractères (MM3, EMA, DOM, MSH, C13…)."""
+    assert collector_info([line(text, 0.95)]).set_code is None
+
+
+def test_the_set_code_after_an_artist_line_is_still_read():
+    assert collector_info([line("Jean-Francois Beaulieu", 0.94), line("C13 • FR", 0.96)]).set_code == "c13"
+
+
+@pytest.mark.parametrize(("text", "code"), [  # lignes réelles lues par l'OCR sur les photos webcam
+    ("MM3·EN ANTHONY PALUMBO", "mm3"), ("EMA·ENVINCENT PROCE", "ema"), ("MMS-EN DANIEL LJUNGGREN", "mms"),
+    ("MM2 -EN PEEE VENTERS", "mm2"), ("MM2·ENRON SPEARS", "mm2"), ("MSH·EN IOHAN GRENIER", "msh"), ("MH1 • FR", "mh1"),
+])
+def test_real_set_code_lines(text, code):
+    assert collector_info([line(text, 0.95)]).set_code == code
+
+
 def test_collector_ignores_text_outside_bottom():
     assert collector_info([line("4/4", 0.5)]) == CollectorInfo()
 
