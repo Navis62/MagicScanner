@@ -123,10 +123,18 @@ autre extension : `tmh2` pointait vers War of the Spark). Chaque édition de jet
 `w*`, `p*` selon l'édition) est rattachée à l'extension Cardmarket « <Édition>: Tokens » ou « <Édition>: Extras », lue par
 son code et non par le vote des cartes. `import` retrouve ensuite l'identifiant par le nom (« Treasure Token (…) » ; les
 emblèmes, donjons et « The Monarch » se vendent sous leur nom complet), selon la même règle : un seul produit de ce nom,
-pas déjà pris, une seule carte concernée. Limites : les jetons homonymes d'une édition (deux « Clue », deux « Food »…)
-restent sans identifiant, car l'ordre des idProduct ne suit pas toujours les numéros de collection ; « Lost Mine of Phandelver » d'Adventures in the Forgotten Realms a deux produits au même nom (et d'autres produits combinés « … Token // Lost Mine
-of Phandelver ») ; une édition dont les cartes se vendent dans deux extensions sœurs (ex. `tdmu` : « Dominaria United: Extras » et
-« Commander: … Extras ») ne rattache pas un nom présent dans les deux. Un lien fait par le nom disparaît au `import`
+pas déjà pris, une seule carte concernée. **Homonymes** (deux « Clue », deux « Food »…) : quand le nom ne suffit pas, l'idProduct est déduit du numéro de collection,
+mais seulement si la preuve est vérifiable. On prend la carte déjà liée la plus proche (produit de la même extension) ;
+le décalage `idProduct - numéro` est appliqué, et confirmé par la carte liée de l'autre côté quand elle existe (une seule
+ancre suffit en bord d'extension, sans confirmation) ; le produit visé doit porter le nom de la carte et ne pas être déjà
+pris. Cela couvre aussi les jetons dont Scryfall donne un produit d'une autre extension (tmh2 n°6-8), sauf si leur nom se
+vend aussi dans une extension sœur.
+Les donjons (type « Dungeon ») sont exclus de cette règle : ils existent aussi en version oversized chez Cardmarket, le produit à leur position n'est pas sûr.
+**Jeton imprimé au dos d'une autre carte** (« Goblin Token (R 1/1) // Dungeon of the Mad Mage ») : sans produit simple de
+ce nom, il est lié au produit double face dont une face est ce jeton, uniquement s'il n'y en a qu'un dans l'extension et qu'un seul jeton de l'édition porte ce nom
+(libre ; un produit déjà pris par une autre carte compte quand même, donc le doute bloque). Limites : des homonymes dont les deux ancres
+se contredisent, ou sans ancre, restent sans identifiant ; une édition dont les cartes se vendent dans deux extensions sœurs
+(ex. `tdmu` : « Dominaria United: Extras » et « Commander: … Extras ») ne rattache pas un nom présent dans les deux. Un lien fait par le nom disparaît au `import`
 suivant (Scryfall réécrit l'identifiant) puis est refait avec l'extension à jour.
 
 ## Organisation du code

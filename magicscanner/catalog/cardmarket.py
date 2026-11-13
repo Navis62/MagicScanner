@@ -180,6 +180,64 @@ def _plain_candidates(by_name: dict[str, list[int]], name: str) -> list[int]:
     return by_name.get(name) or by_name.get(name.replace(" // ", " / "), [])
 
 
+def _anchor_pick(number: int, anchors: list[tuple[int, int]]) -> int | None:
+    """idProduct attendu pour la carte n° `number`, d'après les cartes déjà liées (numéro entier, idProduct), triées :
+    celle d'à côté donne le décalage idProduct - numéro ; l'ancre de l'autre côté, si elle existe, doit donner le même."""
+    below = [a for a in anchors if a[0] < number]
+    above = [a for a in anchors if a[0] > number]
+    sides = [side for side in (below[-1:], above[:1]) if side]
+    offsets = {pid - cn for (cn, pid), in sides}
+    if len(offsets) != 1:
+        return None
+    return number + offsets.pop()
+
+
+def _double_face_pick(name: str, token_names: dict[str, list[int]], taken: set[int]) -> int | None:
+    """Jeton imprimé seulement au dos d'une autre carte (« Goblin Token (R 1/1) // Dungeon of the Mad Mage ») : le produit
+    double face dont une face est ce jeton, s'il n'y en a qu'un dans l'extension (pris ou non : un produit déjà pris
+    prouve que d'autres cartes y figurent) et qu'il est libre."""
+    found = {i for key, ids in token_names.items() if " // " in key and name in key.split(" // ") for i in ids}
+    return found.pop() if len(found) == 1 and not found & taken else None
+
+
+def _link_by_position(con, set_code, leftovers, known, taken, token_names, other_names, homonyms, sister) -> int:
+    """Seconde passe des éditions de jetons, pour les cartes que le nom seul ne départage pas : l'idProduct suit le numéro
+    de collection dans l'extension (tmh2 : 568765 + numéro). Détail des règles dans `_anchor_pick` et `_double_face_pick`."""
+    anchors = sorted((int(r["collector_number"]), r["cardmarket_id"]) for r in con.execute(
+        "SELECT collector_number, cardmarket_id FROM cards WHERE set_code=? AND cardmarket_id IS NOT NULL", (set_code,))
+        if r["cardmarket_id"] in known and r["collector_number"].isdigit())
+    # Un jeton à qui Scryfall donne le produit d'une autre extension (tmh2 n°6 -> War of the Spark) est candidat lui aussi :
+    # le produit à sa position, s'il porte son nom, est le bon.
+    leftovers = leftovers + [(c, _token_found(c, token_names, other_names)) for c in con.execute(
+        "SELECT id, name, type_line, collector_number, cardmarket_id FROM cards WHERE set_code=? AND cardmarket_id IS NOT NULL",
+        (set_code,)) if c["cardmarket_id"] not in known and not any(k in sister for k in _name_keys(c["name"].lower()))]
+    linked = 0
+    for card, found in leftovers:
+        number = card["collector_number"]
+        pick = None
+        if found and number.isdigit() and "Dungeon" not in (card["type_line"] or ""):
+            # Donjons exclus : chez Cardmarket ils existent en version oversized, le produit à la position n'est pas sûr.
+            guess = _anchor_pick(int(number), anchors)
+            pick = guess if guess in found and guess not in taken else None
+        elif (not found and card["cardmarket_id"] is None and homonyms[card["name"].lower()] == 1
+              and (card["type_line"] or "Token").startswith("Token")):
+            pick = _double_face_pick(card["name"].lower(), token_names, taken)
+        if pick is not None:
+            con.execute("UPDATE cards SET cardmarket_id=? WHERE id=?", (pick, card["id"]))
+            taken.add(pick)
+            linked += 1
+    return linked
+
+
+def _token_found(card, token_names, other_names) -> list[int]:
+    """Produits de l'extension qui portent le nom de la carte (jeton : « X Token (…) » ; sinon aussi le nom complet)."""
+    keys = _name_keys(card["name"].lower())
+    found = [i for k in keys for i in token_names.get(k, [])]
+    if not (card["type_line"] or "Token").startswith("Token"):
+        found += [i for k in keys for i in other_names.get(k, [])]
+    return found
+
+
 def link_list_cards(con: sqlite3.Connection) -> int:
     """Scryfall n'indique pas l'idProduct de certaines cartes (environ 1 carte plst sur 5, quelques cartes de FBB,
     Renaissance, Salvat). On le retrouve par le nom, mais seulement quand ça ne laisse aucun doute : un seul produit de
@@ -200,7 +258,7 @@ def link_list_cards(con: sqlite3.Connection) -> int:
                 token_names[p["name"].lower()].append(p["id_product"])
         known = {i for ids in (*token_names.values(), *other_names.values()) for i in ids}
         taken = {r[0] for r in con.execute("SELECT cardmarket_id FROM cards WHERE set_code=? AND cardmarket_id IS NOT NULL", (set_code,))}
-        missing = con.execute("SELECT id, name, type_line FROM cards WHERE set_code=? AND cardmarket_id IS NULL "
+        missing = con.execute("SELECT id, name, type_line, collector_number, cardmarket_id FROM cards WHERE set_code=? AND cardmarket_id IS NULL "
                               "ORDER BY CAST(collector_number AS INTEGER), collector_number", (set_code,)).fetchall()
         homonyms = Counter(m["name"].lower() for m in missing)
         if is_token:
@@ -210,15 +268,14 @@ def link_list_cards(con: sqlite3.Connection) -> int:
                 "SELECT name, cardmarket_id FROM cards WHERE set_code=? AND cardmarket_id IS NOT NULL", (set_code,))
                 if r["cardmarket_id"] not in known)
         rank: Counter = Counter()
+        leftovers = []
         for card in missing:
             name = card["name"].lower()
             if is_token:
                 keys = _name_keys(name)
                 if any(k in sister for k in keys):
                     continue
-                found = [i for k in keys for i in token_names.get(k, [])]
-                if not (card["type_line"] or "Token").startswith("Token"):
-                    found += [i for k in keys for i in other_names.get(k, [])]
+                found = _token_found(card, token_names, other_names)
             else:
                 found = _plain_candidates(token_names, name)
             products = sorted(p for p in found if p not in taken)
@@ -228,11 +285,16 @@ def link_list_cards(con: sqlite3.Connection) -> int:
                 pick = products[rank[name]]
                 rank[name] += 1
             else:
+                if is_token:
+                    leftovers.append((card, found))
                 continue
             con.execute("UPDATE cards SET cardmarket_id=? WHERE id=?", (pick, card["id"]))
             linked += 1
             if pick in products and len(products) == 1:
                 taken.add(pick)
+        if is_token:
+            taken |= {r[0] for r in con.execute("SELECT cardmarket_id FROM cards WHERE set_code=? AND cardmarket_id IS NOT NULL", (set_code,))}
+            linked += _link_by_position(con, set_code, leftovers, known, taken, token_names, other_names, homonyms, sister)
     con.commit()
     log.info("%d cartes rattachées à leur produit Cardmarket par le nom", linked)
     return linked
