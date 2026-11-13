@@ -79,8 +79,12 @@ def map_sets(con: sqlite3.Connection) -> None:
     official = {r["id_expansion"]: r["slug"] for r in con.execute("SELECT * FROM cm_expansions WHERE id_expansion IS NOT NULL")}
 
     confirmed = 0
-    for s in con.execute("SELECT code, name FROM sets WHERE cm_slug_source IS NOT 'manual'").fetchall():
+    for s in con.execute("SELECT code, name, set_type, parent_set_code FROM sets WHERE cm_slug_source IS NOT 'manual'").fetchall():
         exp = votes[s["code"]].most_common(1)[0][0] if votes.get(s["code"]) else None
+        if s["set_type"] == "token":
+            # Les idProduct de Scryfall pour les jetons sont souvent ceux d'une autre extension (tmh2 -> War of the Spark) :
+            # l'extension Cardmarket des jetons se lit sur son code, pas sur le vote.
+            exp = _token_expansion(con, s["code"], s["parent_set_code"]) or exp
         if s["code"] in MULTI_EXPANSION_SETS:
             # Les cartes de cette édition se vendent dans plusieurs extensions Cardmarket : un slug « majoritaire »
             # pointerait vers la page d'une autre version. Seul l'idProduct de chaque carte fait foi.
@@ -110,10 +114,70 @@ LINKED_SETS = {"plst": LIST_EXPANSIONS, "fbb": (57,), "ren": (60,), "psal": (105
 TOKEN_SUFFIX = re.compile(r"\s+Token\b(\s*\([^)]*\))?\s*$", re.IGNORECASE)   # « Kor Soldier Token (White 1/1) » -> « Kor Soldier »
 
 
+def _token_expansion(con: sqlite3.Connection, code: str, parent: str | None) -> int | None:
+    """Extension Cardmarket des jetons d'une édition `t*` : « <Édition>: Tokens » (code TMH3) pour les éditions récentes,
+    « <Édition>: Extras » (code XMH2) pour les plus anciennes. Seule une extension qui contient des produits « Token »
+    est retenue (sinon None : on garde le vote des cartes)."""
+    for sample in (code.upper(), "X" + (parent or code[1:]).upper()):
+        for r in con.execute("SELECT id_expansion FROM cm_expansions WHERE id_expansion IS NOT NULL AND UPPER(sample_code)=?", (sample,)):
+            if con.execute("SELECT 1 FROM cm_products WHERE id_expansion=? AND name LIKE '% Token%' LIMIT 1", (r[0],)).fetchone():
+                return r[0]
+    return None
+
+
 def _token_sets(con: sqlite3.Connection) -> dict[str, tuple[int, ...]]:
     """Éditions de tokens : leurs produits sont dans l'extension Cardmarket de l'édition (« Skeleton Token (Black 1/1) »)."""
     return {r["code"]: (r["cm_id_expansion"],) for r in con.execute(
         "SELECT code, cm_id_expansion FROM sets WHERE set_type='token' AND cm_id_expansion IS NOT NULL")}
+
+
+def _product_key(name: str) -> tuple[str, bool]:
+    """Clé de comparaison d'un produit Cardmarket avec le nom Scryfall, et « est un jeton » (suffixe « Token »).
+    Le suffixe est retiré face par face : « Bird Token (W 1/1) // Clue Token » -> « bird // clue »."""
+    faces = re.split(r"\s+//?\s+", name)
+    if any(TOKEN_SUFFIX.search(f) for f in faces):
+        return " // ".join(TOKEN_SUFFIX.sub("", f).strip().lower() for f in faces), True
+    return name.lower(), False
+
+
+def _name_keys(name: str) -> list[str]:
+    """Écritures possibles du nom d'une carte « A // B » : telle quelle, puis faces inversées (Cardmarket range parfois
+    « The Initiative // Undercity » là où Scryfall écrit « Undercity // The Initiative »)."""
+    name = name.lower()
+    return [name, " // ".join(reversed(name.split(" // ")))] if " // " in name else [name]
+
+
+def _token_index(con: sqlite3.Connection, expansions) -> tuple[dict[str, list[int]], dict[str, list[int]]]:
+    """Produits des extensions, par nom : (jetons « X Token (…) », autres produits au nom complet).
+    La frontière : un jeton-créature (type « Token Creature… ») n'est vendu que sous la forme « X Token (…) », jamais
+    sous un nom nu ; une carte « extra » de l'extension qui porte le même nom (« Spider ») n'est donc pas lui. Un
+    emblème, un donjon, « The Monarch » (type sans « Token ») se vendent sous leur nom complet."""
+    marks = ",".join("?" * len(expansions))
+    tokens: dict[str, list[int]] = defaultdict(list)
+    others: dict[str, list[int]] = defaultdict(list)
+    for p in con.execute(f"SELECT id_product, name FROM cm_products WHERE id_expansion IN ({marks})", tuple(expansions)):
+        key, is_token = _product_key(p["name"])
+        (tokens if is_token else others)[key].append(p["id_product"])
+    return tokens, others
+
+
+def _sister_names(con: sqlite3.Connection, set_code: str, own: int) -> set[str]:
+    """Noms de produits des extensions « Extras » / « Tokens » sœurs vers lesquelles Scryfall renvoie d'autres cartes de
+    l'édition (tdmu : Dominaria United: Extras et Commander: Dominaria United: Extras). Un nom qu'on y trouve aussi est
+    ambigu : on ne sait pas dans laquelle des deux la carte se vend."""
+    sisters = [r[0] for r in con.execute(
+        "SELECT DISTINCT p.id_expansion FROM cards c JOIN cm_products p ON p.id_product = c.cardmarket_id "
+        "JOIN cm_expansions e ON e.id_expansion = p.id_expansion "
+        "WHERE c.set_code=? AND p.id_expansion != ? AND (e.name LIKE '%: Extras' OR e.name LIKE '%: Tokens')", (set_code, own))]
+    if not sisters:
+        return set()
+    tokens, others = _token_index(con, sisters)
+    return set(tokens) | set(others)
+
+
+def _plain_candidates(by_name: dict[str, list[int]], name: str) -> list[int]:
+    """Produits de ce nom ; « A // B » s'écrit aussi « A / B »."""
+    return by_name.get(name) or by_name.get(name.replace(" // ", " / "), [])
 
 
 def link_list_cards(con: sqlite3.Connection) -> int:
@@ -125,19 +189,39 @@ def link_list_cards(con: sqlite3.Connection) -> int:
     linked = 0
     tokens = _token_sets(con)
     for set_code, expansions in {**tokens, **LINKED_SETS}.items():
-        marks = ",".join("?" * len(expansions))
-        by_name: dict[str, list[int]] = defaultdict(list)
-        for p in con.execute(f"SELECT id_product, name FROM cm_products WHERE id_expansion IN ({marks})", expansions):
-            name = TOKEN_SUFFIX.sub("", p["name"]) if set_code in tokens else p["name"]
-            by_name[name.lower()].append(p["id_product"])
+        is_token = set_code in tokens
+        if is_token:
+            token_names, other_names = _token_index(con, expansions)
+            sister = _sister_names(con, set_code, expansions[0])
+        else:
+            marks = ",".join("?" * len(expansions))
+            token_names, other_names, sister = defaultdict(list), defaultdict(list), set()
+            for p in con.execute(f"SELECT id_product, name FROM cm_products WHERE id_expansion IN ({marks})", expansions):
+                token_names[p["name"].lower()].append(p["id_product"])
+        known = {i for ids in (*token_names.values(), *other_names.values()) for i in ids}
         taken = {r[0] for r in con.execute("SELECT cardmarket_id FROM cards WHERE set_code=? AND cardmarket_id IS NOT NULL", (set_code,))}
-        missing = con.execute("SELECT id, name FROM cards WHERE set_code=? AND cardmarket_id IS NULL "
+        missing = con.execute("SELECT id, name, type_line FROM cards WHERE set_code=? AND cardmarket_id IS NULL "
                               "ORDER BY CAST(collector_number AS INTEGER), collector_number", (set_code,)).fetchall()
         homonyms = Counter(m["name"].lower() for m in missing)
+        if is_token:
+            # Un jeton dont Scryfall donne le produit d'une autre extension compte aussi : c'est peut-être lui qui
+            # porte l'unique produit de ce nom ici.
+            homonyms.update(r["name"].lower() for r in con.execute(
+                "SELECT name, cardmarket_id FROM cards WHERE set_code=? AND cardmarket_id IS NOT NULL", (set_code,))
+                if r["cardmarket_id"] not in known)
         rank: Counter = Counter()
         for card in missing:
             name = card["name"].lower()
-            products = sorted(p for p in by_name.get(name) or by_name.get(name.replace(" // ", " / "), []) if p not in taken)
+            if is_token:
+                keys = _name_keys(name)
+                if any(k in sister for k in keys):
+                    continue
+                found = [i for k in keys for i in token_names.get(k, [])]
+                if not (card["type_line"] or "Token").startswith("Token"):
+                    found += [i for k in keys for i in other_names.get(k, [])]
+            else:
+                found = _plain_candidates(token_names, name)
+            products = sorted(p for p in found if p not in taken)
             if len(products) == 1 and homonyms[name] == 1:
                 pick = products[0]
             elif set_code in ORDERED_SETS and len(products) == homonyms[name]:

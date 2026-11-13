@@ -37,3 +37,4 @@ def sync(con: sqlite3.Connection) -> None:
     cm_catalog.store_expansions(con, expansions)
     log.info("%d rattachées à un idExpansion", sum(e[0] is not None for e in expansions))
     cm_catalog.map_sets(con)
+    cm_catalog.link_list_cards(con)     # les extensions des jetons ont pu changer : on rattache à nouveau

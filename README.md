@@ -118,6 +118,17 @@ exportées (comptées comme « sans identifiant Cardmarket » dans la barre d'é
 
 Limite : l'étincelle n'a été validée que sur des images simulées, pas encore sur une vraie carte.
 
+**Jetons** : Scryfall ne donne pas l'identifiant Cardmarket de plus de la moitié des jetons (et en donne parfois un d'une
+autre extension : `tmh2` pointait vers War of the Spark). Chaque édition de jetons (type `token` : `t*`, mais aussi `s*`,
+`w*`, `p*` selon l'édition) est rattachée à l'extension Cardmarket « <Édition>: Tokens » ou « <Édition>: Extras », lue par
+son code et non par le vote des cartes. `import` retrouve ensuite l'identifiant par le nom (« Treasure Token (…) » ; les
+emblèmes, donjons et « The Monarch » se vendent sous leur nom complet), selon la même règle : un seul produit de ce nom,
+pas déjà pris, une seule carte concernée. Limites : les jetons homonymes d'une édition (deux « Clue », deux « Food »…)
+restent sans identifiant, car l'ordre des idProduct ne suit pas toujours les numéros de collection ; « Lost Mine of Phandelver » d'Adventures in the Forgotten Realms a deux produits au même nom (et d'autres produits combinés « … Token // Lost Mine
+of Phandelver ») ; une édition dont les cartes se vendent dans deux extensions sœurs (ex. `tdmu` : « Dominaria United: Extras » et
+« Commander: … Extras ») ne rattache pas un nom présent dans les deux. Un lien fait par le nom disparaît au `import`
+suivant (Scryfall réécrit l'identifiant) puis est refait avec l'extension à jour.
+
 ## Organisation du code
 
 ```
